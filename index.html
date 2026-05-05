@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>AgriTrack – Técnico v3</title>
+<title>AgriTrack – Técnico v4</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -126,7 +126,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <div class="hdr">
   <h1>AgriTrack – App do Técnico</h1>
-  <div class="hdr-s" id="hdr-s">v3 — Selecione uma aba para começar</div>
+  <div class="hdr-s" id="hdr-s">v4 — Selecione uma aba para começar</div>
 </div>
 
 <div class="tabs">
@@ -309,7 +309,7 @@ const J = {
 // Build authenticated base URL with credentials embedded
 const AUTH_BASE = `https://${encodeURIComponent(J.email)}:${encodeURIComponent(J.token)}@agricefprocessos.atlassian.net`;
 const PROXY = 'https://corsproxy.io/?';
-const hdrs = { 'Accept':'application/json', 'Content-Type':'application/json' };
+const hdrs = { 'Accept':'application/json', 'Content-Type':'application/json', 'Accept-Encoding':'identity' };
 
 function purl(path, mut=false){
   return PROXY + encodeURIComponent(AUTH_BASE + path);
