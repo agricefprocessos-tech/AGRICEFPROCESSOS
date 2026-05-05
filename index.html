@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
-<title>AgriTrack – Técnico</title>
+<title>AgriTrack – Técnico v3</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
 :root{
@@ -126,7 +126,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 <div class="hdr">
   <h1>AgriTrack – App do Técnico</h1>
-  <div class="hdr-s" id="hdr-s">Selecione uma aba para começar</div>
+  <div class="hdr-s" id="hdr-s">v3 — Selecione uma aba para começar</div>
 </div>
 
 <div class="tabs">
@@ -349,7 +349,9 @@ function buscarOS(v){
     try{
       const apiUrl = `/rest/api/3/issue/${key}`;
       console.log('Path:', apiUrl);
-      const r=await fetch(purl(apiUrl),{headers:hdrs});
+      const proxyUrl = purl(apiUrl);
+      console.log('PROXY FINAL:', proxyUrl.substring(0,120));
+      const r=await fetch(proxyUrl,{headers:hdrs});
       console.log('Response status:', r.status);
       if(!r.ok){
         const errTxt = await r.text();
