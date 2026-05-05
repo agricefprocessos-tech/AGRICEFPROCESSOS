@@ -307,13 +307,8 @@ const J = {
 };
 
 const hdrs = { 'Authorization': J.auth, 'Accept':'application/json', 'Content-Type':'application/json' };
-// GET proxy
-const PROXY_GET = 'https://api.allorigins.win/raw?url=';
-// POST/PUT proxy  
-const PROXY_MUT = 'https://corsproxy.io/?';
-function purl(url, mut=false){ 
-  return (mut ? PROXY_MUT : PROXY_GET) + encodeURIComponent(url); 
-}
+const PROXY = 'https://corsproxy.io/?url=';
+function purl(url, mut=false){ return PROXY + encodeURIComponent(url); }
 
 // ===== UTILS =====
 let _tt;
