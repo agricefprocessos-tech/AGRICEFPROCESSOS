@@ -301,14 +301,19 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 // ===== CONFIG JIRA =====
 const J = {
   base: 'https://agricefprocessos.atlassian.net',
-  auth: 'Basic ' + btoa('agricef.processos@gmail.com:ATCTT3xFfGN0xnmg_SSCZFB-k5DgyWFz3n1k7FBHh3GZAVYTMRiGrkIexPAOayDjLWHZBgjc4uSwi-lipHwOELZ8CnIvMgVCBIPbASDcqSyRmrkJdX81DkwpRbmXp--eU6j-EquyHGwiVbEBO-heO5jSx0NT6-ewxtNTRyt3XyasBlK-QEwvW4I=4ABD58DE'),
-  // Transition IDs
+  email: 'agricef.processos@gmail.com',
+  token: 'ATCTT3xFfGN0xnmg_SSCZFB-k5DgyWFz3n1k7FBHh3GZAVYTMRiGrkIexPAOayDjLWHZBgjc4uSwi-lipHwOELZ8CnIvMgVCBIPbASDcqSyRmrkJdX81DkwpRbmXp--eU6j-EquyHGwiVbEBO-heO5jSx0NT6-ewxtNTRyt3XyasBlK-QEwvW4I=4ABD58DE',
   T: { concluido:'41', esc:'AGUARDANDO CS' }
 };
 
-const hdrs = { 'Authorization': J.auth, 'Accept':'application/json', 'Content-Type':'application/json' };
+// Build authenticated base URL with credentials embedded
+const AUTH_BASE = `https://${encodeURIComponent(J.email)}:${encodeURIComponent(J.token)}@agricefprocessos.atlassian.net`;
 const PROXY = 'https://corsproxy.io/?';
-function purl(url, mut=false){ return PROXY + encodeURIComponent(url); }
+const hdrs = { 'Accept':'application/json', 'Content-Type':'application/json' };
+
+function purl(path, mut=false){
+  return PROXY + encodeURIComponent(AUTH_BASE + path);
+}
 
 // ===== UTILS =====
 let _tt;
@@ -342,9 +347,8 @@ function buscarOS(v){
     console.log('Key construída:', key);
     el.innerHTML='<div style="font-size:12px;color:var(--t2);padding:6px 0">Buscando...</div>';
     try{
-      const apiUrl = `${J.base}/rest/api/3/issue/${key}`;
-      console.log('API URL:', apiUrl);
-      console.log('Proxy URL:', purl(apiUrl));
+      const apiUrl = `/rest/api/3/issue/${key}`;
+      console.log('Path:', apiUrl);
       const r=await fetch(purl(apiUrl),{headers:hdrs});
       console.log('Response status:', r.status);
       if(!r.ok){
@@ -426,13 +430,13 @@ async function enviarTriagem(){
     }
 
     // 1. Atualizar campos
-    const r1=await fetch(purl(`${J.base}/rest/api/3/issue/${osAtual.key}`,true),{
+    const r1=await fetch(purl(`/rest/api/3/issue/${osAtual.key}`,true),{
       method:'PUT', headers:hdrs, body:JSON.stringify({fields})
     });
     if(!r1.ok) throw new Error('Erro ao atualizar campos: '+(await r1.text()));
 
     // 2. Buscar transições disponíveis
-    const r2=await fetch(purl(`${J.base}/rest/api/3/issue/${osAtual.key}/transitions`),{headers:hdrs});
+    const r2=await fetch(purl(`/rest/api/3/issue/${osAtual.key}/transitions`),{headers:hdrs});
     const td=await r2.json();
 
     let transId=null;
@@ -446,7 +450,7 @@ async function enviarTriagem(){
     }
 
     if(transId){
-      const r3=await fetch(purl(`${J.base}/rest/api/3/issue/${osAtual.key}/transitions`,true),{
+      const r3=await fetch(purl(`/rest/api/3/issue/${osAtual.key}/transitions`,true),{
         method:'POST', headers:hdrs, body:JSON.stringify({transition:{id:transId}})
       });
       if(!r3.ok) throw new Error('Erro ao mover card: '+(await r3.text()));
