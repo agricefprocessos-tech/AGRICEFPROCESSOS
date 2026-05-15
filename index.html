@@ -298,76 +298,124 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="ib">Busque a OS que você está atendendo. Aqui você registra o resultado da tentativa de resolução remota.</div>
   </div>
 
-  <!-- A2: Resultado do atendimento -->
+  <!-- A2: Fluxo de atendimento (dois momentos) -->
   <div id="ate-s2" style="display:none">
     <div class="steps"><div class="sd dn"></div><div class="sd ac"></div><div class="sd"></div></div>
-    <div class="sl">Passo 2 de 3 — Resultado do Atendimento</div>
+    <div class="sl" id="ate-s2-lbl">Passo 2 de 3 — Atendimento</div>
 
     <div class="os-box" id="ate-os-box"></div>
     <button class="btn-ch" onclick="trocarOS('ate')">↩ Trocar OS</button>
 
-    <div class="card" style="margin-top:10px">
-      <div class="ch">Técnico Responsável</div>
-      <div class="cb">
-        <div class="f req">
-          <label>Seu Nome</label>
-          <input type="text" id="ate-tec" placeholder="Nome do técnico">
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <div class="ch">Resultado da Tentativa Remota</div>
-      <div class="cb">
-        <div class="f req">
-          <label>O problema foi resolvido remotamente?</label>
-          <select id="ate-res" onchange="toggleAteResult()">
-            <option value="">Selecione...</option>
-            <option value="sim">Sim — resolvido por telefone/acesso remoto</option>
-            <option value="nao">Não — precisa de intervenção presencial</option>
-          </select>
-        </div>
-      </div>
-    </div>
-
-    <!-- Se resolvido -->
-    <div id="ate-bloco-sol" style="display:none">
-      <div class="card">
-        <div class="ch">Relato da Solução</div>
+    <!-- FASE 1: Iniciar Atendimento -->
+    <div id="ate-fase1" style="display:none">
+      <div class="card" style="margin-top:10px">
+        <div class="ch">Técnico Responsável</div>
         <div class="cb">
           <div class="f req">
-            <label>Descreva a solução aplicada</label>
-            <textarea id="ate-sol" placeholder="O que foi feito para resolver o problema?"></textarea>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Se não resolvido -->
-    <div id="ate-bloco-esc" style="display:none">
-      <div class="card">
-        <div class="ch">Escalonamento para a Fabi</div>
-        <div class="cb">
-          <div class="f req">
-            <label>Recomendação de Caminho</label>
-            <select id="ate-cam">
+            <label>Seu Nome</label>
+            <select id="ate-tec-sel" onchange="salvarTecnico(this.value)">
               <option value="">Selecione...</option>
-              <option value="10022">In loco – visita ao cliente</option>
-              <option value="10023">Enviar para base – Agricef</option>
-              <option value="10024">Análise por mídia – orçamento remoto</option>
+              <option value="Welington Souza">Welington Souza</option>
+              <option value="Ricardo Miguel">Ricardo Miguel</option>
+              <option value="Andre Henrrique">Andre Henrrique</option>
             </select>
           </div>
-          <div class="f req">
-            <label>Motivo do Escalonamento</label>
-            <textarea id="ate-mot" placeholder="Por que não foi possível resolver remotamente?"></textarea>
-          </div>
         </div>
+      </div>
+      <div class="ib blue">Ao iniciar, o card será movido para <b>EM SUPORTE REMOTO</b> no Jira e você será registrado como técnico responsável.</div>
+      <div class="bw">
+        <button class="btn btn-gr" onclick="iniciarAtendimento()">⚡ Iniciar Atendimento →</button>
+        <button class="btn btn-gy" style="margin-top:8px" onclick="trocarOS('ate')">← Voltar</button>
       </div>
     </div>
 
-    <div class="bw">
-      <button class="btn btn-gr" onclick="enviarAtendimento()">Confirmar e Atualizar Jira →</button>
-      <button class="btn btn-gy" style="margin-top:8px" onclick="trocarOS('ate')">← Voltar</button>
+    <!-- FASE 2: Finalizar Atendimento -->
+    <div id="ate-fase2" style="display:none">
+      <div class="ib blue" id="ate-tec-badge" style="margin-top:10px"></div>
+
+      <div class="card" style="margin-top:6px">
+        <div class="ch">Resultado da Tentativa Remota</div>
+        <div class="cb">
+          <div class="f req">
+            <label>O problema foi resolvido remotamente?</label>
+            <select id="ate-res" onchange="toggleAteResult()">
+              <option value="">Selecione...</option>
+              <option value="sim">Sim — resolvido por telefone/acesso remoto</option>
+              <option value="nao">Não — precisa de intervenção presencial</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Se resolvido -->
+      <div id="ate-bloco-sol" style="display:none">
+        <div class="card">
+          <div class="ch">Relato da Solução</div>
+          <div class="cb">
+            <div class="f req">
+              <label>Descreva a solução aplicada</label>
+              <textarea id="ate-sol" placeholder="O que foi feito para resolver o problema?"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Se não resolvido -->
+      <div id="ate-bloco-esc" style="display:none">
+        <div class="card">
+          <div class="ch">Escalonamento para a Fabi</div>
+          <div class="cb">
+            <div class="f req">
+              <label>Recomendação de Caminho</label>
+              <select id="ate-cam">
+                <option value="">Selecione...</option>
+                <option value="10022">In loco – visita ao cliente</option>
+                <option value="10023">Enviar para base – Agricef</option>
+                <option value="10024">Análise por mídia – orçamento remoto</option>
+              </select>
+            </div>
+            <div class="f req">
+              <label>Motivo do Escalonamento</label>
+              <textarea id="ate-mot" placeholder="Por que não foi possível resolver remotamente?"></textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Upload de fotos -->
+      <div class="card">
+        <div class="ch">Evidências do Atendimento (opcional)</div>
+        <div class="cb">
+          <div class="f">
+            <label>Fotos e Vídeos</label>
+            <div style="border:2px dashed var(--bd);border-radius:var(--rs);padding:16px;text-align:center;background:#fafafa;cursor:pointer" onclick="document.getElementById('ate-file-input').click()">
+              <div style="font-size:24px;margin-bottom:6px">📸</div>
+              <div style="font-size:13px;font-weight:600;color:var(--gr)">Toque para adicionar fotos/vídeos</div>
+              <div style="font-size:11px;color:var(--t2);margin-top:3px">Selecione da galeria ou câmera</div>
+            </div>
+            <input type="file" id="ate-file-input" multiple accept="image/*,video/*" style="display:none" onchange="adicionarMidiasAte(this.files)">
+            <div id="ate-files-list" style="margin-top:8px"></div>
+          </div>
+          <div id="ate-upload-status"></div>
+        </div>
+      </div>
+
+      <div class="bw">
+        <button class="btn btn-gr" onclick="finalizarAtendimento()">Finalizar e Atualizar Jira →</button>
+        <button class="btn btn-gy" style="margin-top:8px" onclick="trocarOS('ate')">← Voltar</button>
+      </div>
+    </div>
+
+    <!-- BLOQUEADO: outro técnico está atendendo -->
+    <div id="ate-bloq" style="display:none">
+      <div class="sc" style="padding:30px 20px">
+        <div class="si">🔒</div>
+        <div class="st" style="color:var(--tx)">OS em Atendimento</div>
+        <div class="ss" id="ate-bloq-txt"></div>
+      </div>
+      <div class="bw">
+        <button class="btn btn-gy" onclick="trocarOS('ate')">← Buscar Outra OS</button>
+      </div>
     </div>
   </div>
 
@@ -529,7 +577,8 @@ function buscarOS(ctx, v){
       const equip=d.fields.customfield_10050?.value||'—';
       const cli=d.fields.customfield_10041||'—';
       const sta=d.fields.status?.name||'—';
-      const osData = {key:d.key,title:d.fields.summary,equip,cli,sta};
+      const tec=d.fields.customfield_10048||'';
+      const osData = {key:d.key,title:d.fields.summary,equip,cli,sta,tec};
       resEl.innerHTML=`<div class="os-res" onclick='selOS("${ctx}",${JSON.stringify(JSON.stringify(osData))})'>
         <div class="os-key">${d.key}</div>
         <div class="os-tit">${d.fields.summary}</div>
@@ -551,6 +600,7 @@ function selOS(ctx, osJson){
     <div class="os-box-inf">${os.cli} · ${os.equip} · <b>${os.sta}</b></div>`;
   document.getElementById(ctx+'-s1').style.display='none';
   document.getElementById(ctx+'-s2').style.display='block';
+  if(ctx==='ate') mostrarFaseAtendimento(os);
 }
 
 function trocarOS(ctx){
@@ -561,6 +611,12 @@ function trocarOS(ctx){
     document.getElementById('ate-res').value='';
     document.getElementById('ate-bloco-sol').style.display='none';
     document.getElementById('ate-bloco-esc').style.display='none';
+    document.getElementById('ate-fase1').style.display='none';
+    document.getElementById('ate-fase2').style.display='none';
+    document.getElementById('ate-bloq').style.display='none';
+    document.getElementById('ate-files-list').innerHTML='';
+    document.getElementById('ate-upload-status').innerHTML='';
+    pastaOSAteId=null; pastaOSAteUrl=null; arquivosUploadAte=[];
   }
 }
 
@@ -737,11 +793,9 @@ async function salvarTriagem(){
 }
 
 function irParaAtendimento(){
-  // Pre-fill OS in atendimento tab using the same OS from triagem
   const os = osAtualMap['tri'];
   swTab('ate', document.querySelector('.tab:nth-child(2)'));
   if(os) {
-    // Pre-select the same OS
     osAtualMap['ate'] = os;
     document.getElementById('ate-os-box').innerHTML=`
       <div class="os-box-key">${os.key}</div>
@@ -749,6 +803,7 @@ function irParaAtendimento(){
       <div class="os-box-inf">${os.cli} · ${os.equip} · <b>${os.sta}</b></div>`;
     document.getElementById('ate-s1').style.display='none';
     document.getElementById('ate-s2').style.display='block';
+    mostrarFaseAtendimento(os);
   }
   novaTri();
 }
@@ -769,20 +824,121 @@ function novaTri(){
 }
 
 // ===== ABA ATENDIMENTO =====
+let pastaOSAteId = null;
+let pastaOSAteUrl = null;
+let arquivosUploadAte = [];
+
+function salvarTecnico(nome){
+  if(nome) localStorage.setItem('agritrack_tec', nome);
+}
+
+function mostrarFaseAtendimento(os){
+  const tecLocal = localStorage.getItem('agritrack_tec') || '';
+  const tecOS = os.tec || '';
+  document.getElementById('ate-fase1').style.display='none';
+  document.getElementById('ate-fase2').style.display='none';
+  document.getElementById('ate-bloq').style.display='none';
+  if(!tecOS){
+    document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Iniciar Atendimento';
+    if(tecLocal) document.getElementById('ate-tec-sel').value=tecLocal;
+    document.getElementById('ate-fase1').style.display='block';
+  } else if(tecOS===tecLocal){
+    document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Finalizar Atendimento';
+    document.getElementById('ate-tec-badge').textContent='👤 Atendimento iniciado por: '+tecOS;
+    document.getElementById('ate-fase2').style.display='block';
+  } else {
+    document.getElementById('ate-bloq-txt').innerHTML='Esta OS está sendo atendida por <b>'+tecOS+'</b>.<br>Apenas esse técnico pode finalizá-la.';
+    document.getElementById('ate-bloq').style.display='block';
+  }
+}
+
+async function iniciarAtendimento(){
+  const os=osAtualMap['ate'];
+  if(!os){toast('Selecione uma OS','er');return;}
+  const tec=document.getElementById('ate-tec-sel').value;
+  if(!tec){toast('Selecione seu nome','er');return;}
+
+  load('Iniciando atendimento...');
+  try{
+    await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:tec}})});
+
+    const r2=await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`);
+    const td=await r2.json();
+    const t=td.transitions.find(t=>t.to?.name?.includes('SUPORTE REMOTO'));
+    if(t) await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`,{method:'POST',body:JSON.stringify({transition:{id:t.id}})});
+
+    localStorage.setItem('agritrack_tec', tec);
+    osAtualMap['ate'].tec=tec;
+    uload();
+    toast('Atendimento iniciado!','ok',2500);
+    document.getElementById('ate-fase1').style.display='none';
+    document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Finalizar Atendimento';
+    document.getElementById('ate-tec-badge').textContent='👤 Atendimento iniciado por: '+tec;
+    document.getElementById('ate-fase2').style.display='block';
+  }catch(e){
+    uload();
+    toast('Erro: '+e.message,'er',6000);
+  }
+}
+
 function toggleAteResult(){
   const v=document.getElementById('ate-res').value;
   document.getElementById('ate-bloco-esc').style.display=v==='nao'?'block':'none';
   document.getElementById('ate-bloco-sol').style.display=v==='sim'?'block':'none';
 }
 
-async function enviarAtendimento(){
+async function adicionarMidiasAte(files){
+  if(!osAtualMap['ate']){toast('Selecione uma OS primeiro','er');return;}
+  if(!files||files.length===0) return;
+  const os=osAtualMap['ate'];
+  const filesList=document.getElementById('ate-files-list');
+  const statusEl=document.getElementById('ate-upload-status');
+
+  if(!pastaOSAteId){
+    statusEl.innerHTML='<div class="ib" style="margin:0">⏳ Criando pasta no Drive...</div>';
+    try{
+      const r=await fetch(`${SCRIPT_URL}?action=createFolder&nome=${encodeURIComponent(os.key)}&pastaRaizId=1zOu6023SHjNChj2P0HxAVlrBvZWUZ5v0`);
+      const d=await r.json();
+      if(d.error) throw new Error(d.error);
+      pastaOSAteId=d.id; pastaOSAteUrl=d.url;
+    }catch(e){
+      statusEl.innerHTML=`<div class="ib" style="margin:0;background:var(--rl);border-color:var(--rd);color:var(--rd)">❌ Erro ao criar pasta: ${e.message}</div>`;
+      return;
+    }
+  }
+
+  for(let i=0;i<files.length;i++){
+    const file=files[i];
+    statusEl.innerHTML=`<div class="ib" style="margin:0">⏳ Enviando ${i+1}/${files.length}: ${file.name}...</div>`;
+    try{
+      const base64=await new Promise((res,rej)=>{const rd=new FileReader();rd.onload=()=>res(rd.result.split(',')[1]);rd.onerror=rej;rd.readAsDataURL(file);});
+      const r=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body:'action=uploadFile&pastaId='+encodeURIComponent(pastaOSAteId)+'&nomeArquivo='+encodeURIComponent(file.name)+'&mimeType='+encodeURIComponent(file.type)+'&base64='+encodeURIComponent(base64)});
+      const d=await r.json();
+      if(d.error) throw new Error(d.error);
+      arquivosUploadAte.push({id:d.id,nome:file.name,url:d.url,mimeType:file.type});
+      const item=document.createElement('div');
+      item.style.cssText='display:flex;align-items:center;gap:8px;padding:7px 10px;background:#fff;border:1px solid var(--bd);border-radius:6px;margin-top:6px';
+      const icon=file.type.startsWith('video')?'🎥':'📷';
+      item.innerHTML=`<span style="font-size:18px">${icon}</span><div style="flex:1"><div style="font-size:12px;font-weight:600">${file.name}</div><div style="font-size:11px;color:var(--gr)">✓ Enviado</div></div>`;
+      filesList.appendChild(item);
+    }catch(e){
+      const item=document.createElement('div');
+      item.style.cssText='display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--rl);border:1px solid var(--rd);border-radius:6px;margin-top:6px';
+      item.innerHTML=`<span>❌</span><div style="font-size:12px;color:var(--rd)">${file.name}: ${e.message}</div>`;
+      filesList.appendChild(item);
+    }
+  }
+  statusEl.innerHTML=`<div class="ib" style="margin:0;background:var(--gl);border-color:var(--gr);color:var(--gr)">✅ ${arquivosUploadAte.length} arquivo(s) enviado(s)!</div>`;
+}
+
+async function finalizarAtendimento(){
   const os=osAtualMap['ate'];
   if(!os){toast('Selecione uma OS','er');return;}
-  const tec=document.getElementById('ate-tec').value.trim();
+  const tec=os.tec||localStorage.getItem('agritrack_tec')||'';
   const res=document.getElementById('ate-res').value;
-  if(!tec||!res){toast('Preencha Responsável Técnico e resultado do atendimento','er');return;}
-
-  const resolvido = res==='sim';
+  if(!res){toast('Selecione o resultado do atendimento','er');return;}
+  const resolvido=res==='sim';
   if(resolvido){
     if(!document.getElementById('ate-sol').value.trim()){toast('Descreva a solução aplicada','er');return;}
   }else{
@@ -791,21 +947,50 @@ async function enviarAtendimento(){
     }
   }
 
-  load('Atualizando OS no Jira...');
+  if(window._ateSaving) return;
+  window._ateSaving=true;
+  load('Salvando atendimento...');
   try{
-    const fields = {customfield_10048: tec};
-    if(resolvido){
-      fields.customfield_10044 = toADF(document.getElementById('ate-sol').value.trim());
-    }else{
-      fields.customfield_10047 = {id:document.getElementById('ate-cam').value};
-      fields.customfield_10046 = toADF(document.getElementById('ate-mot').value.trim());
-
+    // 1. Criar pasta no Drive se não existe
+    if(!pastaOSAteId){
+      const rp=await fetch(`${SCRIPT_URL}?action=createFolder&nome=${encodeURIComponent(os.key)}&pastaRaizId=1zOu6023SHjNChj2P0HxAVlrBvZWUZ5v0`);
+      const dp=await rp.json();
+      if(dp.error) throw new Error('Erro ao criar pasta: '+dp.error);
+      pastaOSAteId=dp.id; pastaOSAteUrl=dp.url;
     }
 
-    console.log('Enviando fields:', JSON.stringify({fields}));
+    // 2. Gerar PDF de atendimento
+    load('Gerando PDF de atendimento...');
+    const camSel=document.getElementById('ate-cam');
+    const camTexto=resolvido?'':camSel.options[camSel.selectedIndex]?.text||'';
+    const payload={
+      pastaId:pastaOSAteId,
+      atendimento:{
+        osKey:os.key, equip:os.equip, tec:tec,
+        data:new Date().toLocaleString('pt-BR'),
+        resolvido:resolvido,
+        solucao:resolvido?document.getElementById('ate-sol').value.trim():'',
+        caminho:camTexto,
+        motivo:!resolvido?document.getElementById('ate-mot').value.trim():''
+      },
+      imagens:arquivosUploadAte.map(a=>({id:a.id,nome:a.nome,mimeType:a.mimeType||'image/jpeg'}))
+    };
+    const pdfResp=await fetch(SCRIPT_URL+'?action=relatorioAtendimento',{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)});
+    const pdfData=await pdfResp.json();
+    console.log('PDF atendimento:', pdfData);
+
+    // 3. Atualizar campos no Jira
+    load('Atualizando Jira...');
+    const fields={customfield_10048:tec};
+    if(resolvido){
+      fields.customfield_10044=toADF(document.getElementById('ate-sol').value.trim());
+    }else{
+      fields.customfield_10047={id:document.getElementById('ate-cam').value};
+      fields.customfield_10046=toADF(document.getElementById('ate-mot').value.trim());
+    }
     await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields})});
 
-    // Buscar e executar transição
+    // 4. Transição de status
     const r2=await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`);
     const td=await r2.json();
     let transId=null;
@@ -815,34 +1000,36 @@ async function enviarAtendimento(){
       const t=td.transitions.find(t=>t.to?.name?.includes('AGUARDANDO CS'));
       transId=t?.id||null;
     }
-    if(transId){
-      console.log('Executando transição:', transId);
-      await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`,{
-        method:'POST',body:JSON.stringify({transition:{id:transId}})
-      });
-    }
+    if(transId) await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`,{method:'POST',body:JSON.stringify({transition:{id:transId}})});
 
     uload();
-    const camTxt=resolvido?'':document.getElementById('ate-cam').options[document.getElementById('ate-cam').selectedIndex]?.text||'';
+    window._ateSaving=false;
     document.getElementById('ate-s3-icon').textContent=resolvido?'✅':'📤';
     document.getElementById('ate-s3-tit').textContent=resolvido?'OS Concluída!':'Escalonado para a Fabi!';
     document.getElementById('ate-s3-txt').innerHTML=resolvido
-      ?`OS <b>${os.key}</b> marcada como <b>Concluída</b>.`
-      :`OS <b>${os.key}</b> encaminhada para a <b>Fabi</b>.<br><br>Caminho: <b>${camTxt}</b>`;
+      ?`OS <b>${os.key}</b> marcada como <b>Concluída</b>.<br>PDF salvo no Drive.`
+      :`OS <b>${os.key}</b> encaminhada para a <b>Fabi</b>.<br>Caminho: <b>${camTexto}</b><br>PDF salvo no Drive.`;
     document.getElementById('ate-s2').style.display='none';
     document.getElementById('ate-s3').style.display='block';
   }catch(e){
     uload();
+    window._ateSaving=false;
     toast('Erro: '+e.message,'er',6000);
   }
 }
 
 function novoAte(){
   osAtualMap['ate']=null;
-  ['ate-tec','ate-sol','ate-mot','ate-lnk'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  pastaOSAteId=null; pastaOSAteUrl=null; arquivosUploadAte=[];
+  ['ate-sol','ate-mot'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   document.getElementById('ate-res').value='';
   document.getElementById('ate-bloco-sol').style.display='none';
   document.getElementById('ate-bloco-esc').style.display='none';
+  document.getElementById('ate-fase1').style.display='none';
+  document.getElementById('ate-fase2').style.display='none';
+  document.getElementById('ate-bloq').style.display='none';
+  document.getElementById('ate-files-list').innerHTML='';
+  document.getElementById('ate-upload-status').innerHTML='';
   document.getElementById('ate-s3').style.display='none';
   document.getElementById('ate-s1').style.display='block';
 }
