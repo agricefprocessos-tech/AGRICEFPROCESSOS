@@ -1154,7 +1154,8 @@ function buscarChk(q){
   const badge=document.getElementById('chk-badge');
   q=(q||'').trim();
   if(!q){
-    res.style.display='none'; secs.style.display=''; nav.style.display=''; bnav.style.display=''; badge.style.display='none';
+    res.style.display='none'; secs.style.display=''; nav.style.display=''; bnav.style.display='';
+    if(badge && SECTIONS && SECTIONS[secIdx]){badge.textContent=`📍 ${secIdx+1}/${SECTIONS.length} — ${SECTIONS[secIdx].nome}`;badge.style.display='block';}
     return;
   }
   res.style.display='block'; secs.style.display='none'; nav.style.display='none'; bnav.style.display='none'; badge.style.display='none';
