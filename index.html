@@ -787,19 +787,29 @@ async function salvarTriagem(){
     const pdfData = await pdfResp.json();
     console.log('PDF gerado:', pdfData);
 
-    // 3. Atualizar Jira: link da pasta + título padronizado
-    load('Atualizando Jira...');
+    // 3. Atualizar Jira: título padronizado (summary)
+    load('Atualizando título no Jira...');
     const resumoTitulo = desc.replace(/\s+/g,' ').substring(0,60).replace(/\s\S*$/,'') + (desc.length>60?'…':'');
     const novoTitulo = `${os.equip} | ${os.cli} – ${resumoTitulo}`;
-    await jiraFetch('/rest/api/3/issue/' + os.key, {
-      method: 'PUT',
-      body: JSON.stringify({ fields: { customfield_10045: pastaOSUrl, summary: novoTitulo } })
-    });
+    try {
+      await jiraFetch('/rest/api/3/issue/' + os.key, {
+        method: 'PUT',
+        body: JSON.stringify({ fields: { summary: novoTitulo } })
+      });
+    } catch(titErr) { console.warn('Título não atualizado:', titErr.message); }
 
-    // 4. Notificação por email (não bloqueia o fluxo se falhar)
+    // 3b. Atualizar link da pasta (campo separado — não bloqueia se falhar)
+    try {
+      await jiraFetch('/rest/api/3/issue/' + os.key, {
+        method: 'PUT',
+        body: JSON.stringify({ fields: { customfield_10045: pastaOSUrl } })
+      });
+    } catch(pastaErr) { console.warn('Campo pasta não atualizado:', pastaErr.message); }
+
+    // 4. Notificação por email
     load('Enviando notificação...');
     try {
-      await fetch(SCRIPT_URL + '?action=notificarTriagem', {
+      const emailResp = await fetch(SCRIPT_URL + '?action=notificarTriagem', {
         method: 'POST',
         headers: {'Content-Type': 'text/plain'},
         body: JSON.stringify({
@@ -808,7 +818,12 @@ async function salvarTriagem(){
           data: new Date().toLocaleString('pt-BR')
         })
       });
-    } catch(emailErr) { console.warn('Email não enviado:', emailErr.message); }
+      const emailData = await emailResp.json();
+      if(emailData.error) console.warn('Email erro:', emailData.error);
+    } catch(emailErr) {
+      console.warn('Email não enviado:', emailErr.message);
+      toast('Aviso: notificação de email não foi enviada','al',4000);
+    }
 
     uload();
     document.getElementById('tri-s3-txt').innerHTML =
@@ -834,6 +849,7 @@ function irParaAtendimento(){
   const os = osAtualMap['tri'];
   swTab('ate', document.querySelector('.tab:nth-child(2)'));
   if(os) {
+    os.tec = ''; // Vindo da triagem: técnico ainda não foi definido, sempre mostrar fase1
     osAtualMap['ate'] = os;
     document.getElementById('ate-os-box').innerHTML=`
       <div class="os-box-key">${os.key}</div>
@@ -902,14 +918,15 @@ async function iniciarAtendimento(){
   try{
     await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:tec}})});
 
-    const r2=await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`);
-    const td=await r2.json();
-    const t=(td.transitions||[]).find(t=>t.to?.name?.includes('SUPORTE REMOTO'));
-    if(t){
-      await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`,{method:'POST',body:JSON.stringify({transition:{id:t.id}})});
-    } else {
-      console.warn('Transição EM SUPORTE REMOTO não encontrada. Status atual pode não permitir essa transição.');
-      toast('Atenção: OS não movida para EM SUPORTE REMOTO (verifique o status atual no Jira)','al',5000);
+    try{
+      const r2=await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`);
+      const td=await r2.json();
+      const t=(td.transitions||[]).find(t=>t.to?.name?.includes('SUPORTE REMOTO'));
+      const transId=t?.id||'9'; // ID 9 = EM SUPORTE REMOTO (fallback hardcoded)
+      await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`,{method:'POST',body:JSON.stringify({transition:{id:transId}})});
+    }catch(transErr){
+      console.warn('Transição EM SUPORTE REMOTO falhou:',transErr.message);
+      toast('Atenção: OS não movida para EM SUPORTE REMOTO','al',4000);
     }
 
     localStorage.setItem('agritrack_tec', tec);
@@ -1047,12 +1064,17 @@ async function finalizarAtendimento(){
     const td=await r2.json();
     let transId=null;
     if(resolvido){
-      transId='41';
+      transId='41'; // ID fixo: Concluído
     }else{
       const t=td.transitions.find(t=>t.to?.name?.includes('AGUARDANDO CS'));
-      transId=t?.id||null;
+      transId=t?.id||'8'; // ID 8 = AGUARDANDO CS (fallback)
     }
     if(transId) await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`,{method:'POST',body:JSON.stringify({transition:{id:transId}})});
+
+    // 5. Limpar campo técnico para liberar OS para futuros atendimentos
+    try{
+      await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:null}})});
+    }catch(e){ console.warn('Não foi possível limpar campo técnico:', e.message); }
 
     uload();
     window._ateSaving=false;
