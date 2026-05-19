@@ -760,14 +760,12 @@ async function salvarTriagem(){
       document.getElementById('tri-link-area').style.display = 'block';
     }
 
-    // 2. Gerar PDF + enviar email (tudo no mesmo servidor, sem fetch extra)
-    load('Gerando PDF e enviando notificação...');
+    // 2. Gerar PDF de triagem
+    load('Gerando PDF de triagem...');
     const resumoTitulo = desc.replace(/\s+/g,' ').substring(0,60).replace(/\s\S*$/,'') + (desc.length>60?'…':'');
     const novoTitulo = `${os.equip} | ${os.cli} – ${resumoTitulo}`;
     const payload = {
       pastaId: pastaOSId,
-      email: email,           // backend envia o email dentro do mesmo criarRelatorio
-      titulo: novoTitulo,
       triagem: {
         osKey: os.key,
         equip: os.equip,
@@ -790,7 +788,7 @@ async function salvarTriagem(){
     });
     const pdfData = await pdfResp.json();
     if(pdfData.error) throw new Error('PDF: ' + pdfData.error);
-    console.log('PDF gerado + email enviado:', pdfData);
+    console.log('PDF gerado:', pdfData);
 
     // 3. Atualizar Jira: título padronizado
     load('Atualizando Jira...');
