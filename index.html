@@ -760,10 +760,14 @@ async function salvarTriagem(){
       document.getElementById('tri-link-area').style.display = 'block';
     }
 
-    // 2. Gerar PDF de triagem com imagens embutidas
-    load('Gerando PDF de triagem...');
+    // 2. Gerar PDF + enviar email (tudo no mesmo servidor, sem fetch extra)
+    load('Gerando PDF e enviando notificação...');
+    const resumoTitulo = desc.replace(/\s+/g,' ').substring(0,60).replace(/\s\S*$/,'') + (desc.length>60?'…':'');
+    const novoTitulo = `${os.equip} | ${os.cli} – ${resumoTitulo}`;
     const payload = {
       pastaId: pastaOSId,
+      email: email,           // backend envia o email dentro do mesmo criarRelatorio
+      titulo: novoTitulo,
       triagem: {
         osKey: os.key,
         equip: os.equip,
@@ -785,12 +789,11 @@ async function salvarTriagem(){
       body: JSON.stringify(payload)
     });
     const pdfData = await pdfResp.json();
-    console.log('PDF gerado:', pdfData);
+    if(pdfData.error) throw new Error('PDF: ' + pdfData.error);
+    console.log('PDF gerado + email enviado:', pdfData);
 
-    // 3. Atualizar Jira: título padronizado (summary)
-    load('Atualizando título no Jira...');
-    const resumoTitulo = desc.replace(/\s+/g,' ').substring(0,60).replace(/\s\S*$/,'') + (desc.length>60?'…':'');
-    const novoTitulo = `${os.equip} | ${os.cli} – ${resumoTitulo}`;
+    // 3. Atualizar Jira: título padronizado
+    load('Atualizando Jira...');
     try {
       await jiraFetch('/rest/api/3/issue/' + os.key, {
         method: 'PUT',
@@ -798,32 +801,13 @@ async function salvarTriagem(){
       });
     } catch(titErr) { console.warn('Título não atualizado:', titErr.message); }
 
-    // 3b. Atualizar link da pasta (campo separado — não bloqueia se falhar)
+    // 3b. Link da pasta no Jira (não bloqueia se falhar)
     try {
       await jiraFetch('/rest/api/3/issue/' + os.key, {
         method: 'PUT',
         body: JSON.stringify({ fields: { customfield_10045: pastaOSUrl } })
       });
     } catch(pastaErr) { console.warn('Campo pasta não atualizado:', pastaErr.message); }
-
-    // 4. Notificação por email
-    load('Enviando notificação...');
-    try {
-      const emailResp = await fetch(SCRIPT_URL + '?action=notificarTriagem', {
-        method: 'POST',
-        headers: {'Content-Type': 'text/plain'},
-        body: JSON.stringify({
-          osKey: os.key, titulo: novoTitulo, equip: os.equip, cli: os.cli,
-          resp, email, impacto: impactoTexto, desc, pastaUrl: pastaOSUrl,
-          data: new Date().toLocaleString('pt-BR')
-        })
-      });
-      const emailData = await emailResp.json();
-      if(emailData.error) console.warn('Email erro:', emailData.error);
-    } catch(emailErr) {
-      console.warn('Email não enviado:', emailErr.message);
-      toast('Aviso: notificação de email não foi enviada','al',4000);
-    }
 
     uload();
     document.getElementById('tri-s3-txt').innerHTML =
