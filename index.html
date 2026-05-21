@@ -1034,10 +1034,10 @@ async function finalizarAtendimento(){
     load('Atualizando Jira...');
     const fields={customfield_10048:tec};
     if(resolvido){
-      fields.customfield_10044=toADF(document.getElementById('ate-sol').value.trim());
+      fields.customfield_10044=document.getElementById('ate-sol').value.trim();
     }else{
       fields.customfield_10047={id:document.getElementById('ate-cam').value};
-      fields.customfield_10046=toADF(document.getElementById('ate-mot').value.trim());
+      fields.customfield_10046=document.getElementById('ate-mot').value.trim();
     }
     await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields})});
 
@@ -1048,8 +1048,15 @@ async function finalizarAtendimento(){
     if(resolvido){
       transId='41'; // ID fixo: Concluído
     }else{
-      const t=td.transitions.find(t=>t.to?.name?.includes('AGUARDANDO CS'));
-      transId=t?.id||'8'; // ID 8 = AGUARDANDO CS (fallback)
+      // Mapeia caminho escolhido → transição Jira correta
+      const camVal=document.getElementById('ate-cam').value;
+      const CAMINHO_TRANS={
+        '10022':'3', // In loco → AGUARDANDO DESLOCAMENTO
+        '10023':'2', // Enviar para base → AGUARDANDO CHEGADA – BASE
+        '10024':'4'  // Análise por mídia → ANÁLISE REMOTA / MÍDIA
+      };
+      transId=CAMINHO_TRANS[camVal]||
+        (td.transitions||[]).find(t=>t.to?.name?.includes('AGUARDANDO')||t.to?.name?.includes('ANÁLISE'))?.id||'3';
     }
     if(transId) await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`,{method:'POST',body:JSON.stringify({transition:{id:transId}})});
 
