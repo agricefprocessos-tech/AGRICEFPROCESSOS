@@ -132,6 +132,30 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .tag-red{background:var(--rl);color:var(--rd)}
 .tag-blue{background:var(--bll);color:var(--bl)}
 .divider{height:1px;background:var(--bd);margin:8px 14px}
+/* Atendimento — seletor de modo */
+.modo-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:14px 12px 6px}
+.modo-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:22px 10px;border-radius:var(--r);border:2.5px solid var(--bd);background:#fff;cursor:pointer;text-align:center;transition:.15s;gap:6px}
+.modo-btn:active{opacity:.78}
+.modo-btn .mi{font-size:36px}
+.modo-btn .mt{font-size:13px;font-weight:700;color:var(--tx)}
+.modo-btn .ms{font-size:11px;color:var(--t2);margin-top:1px;line-height:1.3}
+.modo-btn.remoto{border-color:var(--bl);background:var(--bll)}
+.modo-btn.fisico{border-color:var(--gr);background:var(--gl)}
+/* Kit de peças */
+.kit-item{background:#fff;border:1px solid var(--bd);border-radius:var(--rs);margin:6px 12px;overflow:hidden}
+.kit-item-hdr{padding:10px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.kit-item-cod{font-size:10px;font-weight:700;color:var(--t2);background:var(--ly);border-radius:4px;padding:2px 6px;white-space:nowrap}
+.kit-item-nm{flex:1;font-size:13px;font-weight:500;min-width:80px}
+.kit-item-qty{font-size:11px;font-weight:700;color:var(--bl);background:var(--bll);border-radius:4px;padding:2px 6px;white-space:nowrap}
+.kit-opts{display:grid;grid-template-columns:1fr 1fr 1fr;border-top:1px solid var(--bd)}
+.kit-opt{padding:9px 4px;text-align:center;font-size:11px;font-weight:600;border-right:1px solid var(--bd);cursor:pointer;transition:.12s;color:var(--t2)}
+.kit-opt:last-child{border-right:none}
+.kit-opt:active{opacity:.7}
+.kit-opt.sel-ok{background:#d1fae5;color:#065f46}
+.kit-opt.sel-dev{background:var(--al);color:#92400e}
+.kit-opt.sel-dan{background:var(--rl);color:var(--rd)}
+.kit-add-btn{display:flex;align-items:center;justify-content:center;gap:7px;padding:11px;margin:8px 12px;border:2px dashed var(--bd);border-radius:var(--rs);cursor:pointer;font-size:13px;font-weight:600;color:var(--t2);background:#fafafa;transition:.15s}
+.kit-add-btn:active{opacity:.7}
 </style>
 </head>
 <body>
@@ -303,16 +327,34 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div class="ib">Busque a OS que você está atendendo. Aqui você registra o resultado da tentativa de resolução remota.</div>
   </div>
 
-  <!-- A2: Fluxo de atendimento (dois momentos) -->
+  <!-- A2: Fluxo de atendimento — bifurcado -->
   <div id="ate-s2" style="display:none">
     <div class="steps"><div class="sd dn"></div><div class="sd ac"></div><div class="sd"></div></div>
-    <div class="sl" id="ate-s2-lbl">Passo 2 de 3 — Atendimento</div>
+    <div class="sl" id="ate-s2-lbl">Passo 2 de 3 — Tipo de Atendimento</div>
 
     <div class="os-box" id="ate-os-box"></div>
     <button class="btn-ch" onclick="trocarOS('ate')">↩ Trocar OS</button>
 
-    <!-- FASE 1: Iniciar Atendimento -->
-    <div id="ate-fase1" style="display:none">
+    <!-- MODO: escolha do tipo de atendimento -->
+    <div id="ate-modo" style="display:none">
+      <div style="padding:12px 12px 4px;font-size:12px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.5px">Como você vai atender esta OS?</div>
+      <div class="modo-grid">
+        <div class="modo-btn remoto" onclick="selecionarModo('remoto')">
+          <div class="mi">📞</div>
+          <div class="mt">Suporte Remoto</div>
+          <div class="ms">Por telefone ou acesso remoto</div>
+        </div>
+        <div class="modo-btn fisico" onclick="selecionarModo('fisico')">
+          <div class="mi">🔧</div>
+          <div class="mt">Manutenção Física</div>
+          <div class="ms">Presença in-loco ou na base</div>
+        </div>
+      </div>
+      <div class="ib">Suporte Remoto moverá a OS para <b>EM SUPORTE REMOTO</b>. Manutenção Física moverá para <b>EM MANUTENÇÃO</b>.</div>
+    </div>
+
+    <!-- ── FASE REMOTA: Iniciar ── -->
+    <div id="ate-fase-rem-ini" style="display:none">
       <div class="card" style="margin-top:10px">
         <div class="ch">Técnico Responsável</div>
         <div class="cb">
@@ -327,32 +369,34 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           </div>
         </div>
       </div>
-      <div class="ib blue">Ao iniciar, o card será movido para <b>EM SUPORTE REMOTO</b> no Jira e você será registrado como técnico responsável.</div>
+      <div class="ib blue">Ao iniciar, o card será movido para <b>EM SUPORTE REMOTO</b> e você registrado como responsável.</div>
       <div class="bw">
-        <button class="btn btn-gr" onclick="iniciarAtendimento()">⚡ Iniciar Atendimento →</button>
-        <button class="btn btn-gy" style="margin-top:8px" onclick="trocarOS('ate')">← Voltar</button>
+        <button class="btn btn-bl" onclick="iniciarSuporteRemoto()">📞 Iniciar Suporte Remoto →</button>
+        <button class="btn btn-gy" style="margin-top:8px" onclick="voltarModo()">← Voltar</button>
       </div>
     </div>
 
-    <!-- FASE 2: Finalizar Atendimento -->
-    <div id="ate-fase2" style="display:none">
+    <!-- ── FASE REMOTA: Concluir ── -->
+    <div id="ate-fase-rem-fin" style="display:none">
       <div class="ib blue" id="ate-tec-badge" style="margin-top:10px"></div>
 
       <div class="card" style="margin-top:6px">
-        <div class="ch">Resultado da Tentativa Remota</div>
+        <div class="ch">Resultado do Suporte Remoto</div>
         <div class="cb">
           <div class="f req">
-            <label>O problema foi resolvido remotamente?</label>
+            <label>O problema foi resolvido?</label>
             <select id="ate-res" onchange="toggleAteResult()">
               <option value="">Selecione...</option>
-              <option value="sim">Sim — resolvido por telefone/acesso remoto</option>
-              <option value="nao">Não — precisa de intervenção presencial</option>
+              <option value="sim">✅ Sim — resolvido por telefone / acesso remoto</option>
+              <option value="nao_fisico">🔧 Não — precisa de manutenção física in-loco</option>
+              <option value="nao_base">📦 Não — enviar equipamento para a base Agricef</option>
+              <option value="nao_midia">📷 Não — análise por mídia / orçamento remoto</option>
             </select>
           </div>
         </div>
       </div>
 
-      <!-- Se resolvido -->
+      <!-- Resolvido: relato da solução -->
       <div id="ate-bloco-sol" style="display:none">
         <div class="card">
           <div class="ch">Relato da Solução</div>
@@ -365,20 +409,30 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         </div>
       </div>
 
-      <!-- Se não resolvido -->
-      <div id="ate-bloco-esc" style="display:none">
+      <!-- Não resolvido → físico in-loco: diagnóstico + peças suspeitas -->
+      <div id="ate-bloco-fisico" style="display:none">
         <div class="card">
-          <div class="ch">Escalonamento para a Fabi</div>
+          <div class="ch">Diagnóstico Remoto</div>
           <div class="cb">
             <div class="f req">
-              <label>Recomendação de Caminho</label>
-              <select id="ate-cam">
-                <option value="">Selecione...</option>
-                <option value="10022">In loco – visita ao cliente</option>
-                <option value="10023">Enviar para base – Agricef</option>
-                <option value="10024">Análise por mídia – orçamento remoto</option>
-              </select>
+              <label>O que foi diagnosticado remotamente?</label>
+              <textarea id="ate-mot-fisico" placeholder="Descreva o diagnóstico e por que é necessária a visita física..."></textarea>
             </div>
+          </div>
+        </div>
+        <div class="sec-t">Peças Possivelmente Necessárias (kit para o PCP)</div>
+        <div id="ate-pecas-remotas"></div>
+        <div class="kit-add-btn" onclick="adicionarPecaRemota()">
+          <span style="font-size:18px">＋</span> Adicionar Peça Suspeita
+        </div>
+        <div class="ib" style="margin-top:4px">Estas peças serão enviadas ao PCP para preparar o kit antes da visita.</div>
+      </div>
+
+      <!-- Não resolvido → outros caminhos -->
+      <div id="ate-bloco-esc" style="display:none">
+        <div class="card">
+          <div class="ch">Escalonamento</div>
+          <div class="cb">
             <div class="f req">
               <label>Motivo do Escalonamento</label>
               <textarea id="ate-mot" placeholder="Por que não foi possível resolver remotamente?"></textarea>
@@ -387,7 +441,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         </div>
       </div>
 
-      <!-- Upload de fotos -->
+      <!-- Upload de fotos (remoto) -->
       <div class="card">
         <div class="ch">Evidências do Atendimento (opcional)</div>
         <div class="cb">
@@ -398,7 +452,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
               <div style="font-size:13px;font-weight:600;color:var(--gr)">Toque para adicionar fotos/vídeos</div>
               <div style="font-size:11px;color:var(--t2);margin-top:3px">Selecione da galeria ou câmera</div>
             </div>
-            <input type="file" id="ate-file-input" multiple accept="image/*,video/*" style="display:none" onchange="adicionarMidiasAte(this.files)">
+            <input type="file" id="ate-file-input" multiple accept="image/*,video/*" style="display:none" onchange="adicionarMidiasAte(this.files,'rem')">
             <div id="ate-files-list" style="margin-top:8px"></div>
           </div>
           <div id="ate-upload-status"></div>
@@ -406,7 +460,86 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
 
       <div class="bw">
-        <button class="btn btn-gr" onclick="finalizarAtendimento()">Finalizar e Atualizar Jira →</button>
+        <button class="btn btn-gr" onclick="finalizarAtendimentoRemoto()">Finalizar e Atualizar Jira →</button>
+        <button class="btn btn-gy" style="margin-top:8px" onclick="trocarOS('ate')">← Voltar</button>
+      </div>
+    </div>
+
+    <!-- ── FASE FÍSICA: Iniciar ── -->
+    <div id="ate-fase-fis-ini" style="display:none">
+      <div class="card" style="margin-top:10px">
+        <div class="ch">Técnico Responsável</div>
+        <div class="cb">
+          <div class="f req">
+            <label>Seu Nome</label>
+            <select id="ate-tec-sel-fis" onchange="salvarTecnico(this.value)">
+              <option value="">Selecione...</option>
+              <option value="Welington Souza">Welington Souza</option>
+              <option value="Ricardo Miguel">Ricardo Miguel</option>
+              <option value="Andre Henrrique">Andre Henrrique</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="ib" id="ate-kit-aviso">🔍 Verificando kit de peças...</div>
+      <div class="bw">
+        <button class="btn btn-gr" onclick="iniciarManutencaoFisica()">🔧 Iniciar Manutenção Física →</button>
+        <button class="btn btn-gy" style="margin-top:8px" onclick="voltarModo()">← Voltar</button>
+      </div>
+    </div>
+
+    <!-- ── FASE FÍSICA: Execução / Concluir ── -->
+    <div id="ate-fase-fis-fin" style="display:none">
+      <div class="ib blue" id="ate-tec-badge-fis" style="margin-top:10px"></div>
+
+      <!-- Kit de Peças -->
+      <div id="ate-kit-section">
+        <div class="sec-t" id="ate-kit-title">Kit de Peças</div>
+        <div id="ate-kit-list"></div>
+        <div class="kit-add-btn" onclick="adicionarPecaExtra()">
+          <span style="font-size:18px">＋</span> Adicionar Peça Extra (descoberta in-loco)
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="ch">Relato da Execução</div>
+        <div class="cb">
+          <div class="f req">
+            <label>O que foi feito / Resultado</label>
+            <textarea id="ate-fis-relato" placeholder="Descreva o que foi executado, peças trocadas, ajustes realizados..."></textarea>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div class="f">
+              <label>Horímetro Final</label>
+              <input type="number" id="ate-fis-horimetro" placeholder="horas">
+            </div>
+            <div class="f">
+              <label>Tempo de Execução</label>
+              <input type="text" id="ate-fis-tempo" placeholder="Ex: 2h30">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Upload de fotos (físico) -->
+      <div class="card">
+        <div class="ch">Fotos da Manutenção (opcional)</div>
+        <div class="cb">
+          <div class="f">
+            <div style="border:2px dashed var(--bd);border-radius:var(--rs);padding:16px;text-align:center;background:#fafafa;cursor:pointer" onclick="document.getElementById('ate-fis-file-input').click()">
+              <div style="font-size:24px;margin-bottom:6px">📸</div>
+              <div style="font-size:13px;font-weight:600;color:var(--gr)">Toque para adicionar fotos/vídeos</div>
+              <div style="font-size:11px;color:var(--t2);margin-top:3px">Selecione da galeria ou câmera</div>
+            </div>
+            <input type="file" id="ate-fis-file-input" multiple accept="image/*,video/*" style="display:none" onchange="adicionarMidiasAte(this.files,'fis')">
+            <div id="ate-fis-files-list" style="margin-top:8px"></div>
+          </div>
+          <div id="ate-fis-upload-status"></div>
+        </div>
+      </div>
+
+      <div class="bw">
+        <button class="btn btn-gr" onclick="finalizarManutencaoFisica()">✅ Finalizar Manutenção →</button>
         <button class="btn btn-gy" style="margin-top:8px" onclick="trocarOS('ate')">← Voltar</button>
       </div>
     </div>
@@ -549,7 +682,7 @@ async function jiraFetch(path, options={}) {
 }
 
 // ===== UTILS =====
-let _tt;
+var _tt;
 function toast(msg, tp='ok', ms=3500){
   const el=document.getElementById('toast');
   el.textContent=msg; el.className='toast on '+tp;
@@ -574,8 +707,8 @@ function selRadio(name, val, elId){
 }
 
 // ===== OS BUSCA (compartilhada) =====
-const osAtualMap = {};
-let _bt = {};
+var osAtualMap = {};
+var _bt = {};
 
 function buscarOS(ctx, v){
   clearTimeout(_bt[ctx]);
@@ -621,25 +754,32 @@ function trocarOS(ctx){
   osAtualMap[ctx]=null;
   document.getElementById(ctx+'-s2').style.display='none';
   document.getElementById(ctx+'-s1').style.display='block';
-  if(ctx==='ate'){
-    document.getElementById('ate-res').value='';
-    document.getElementById('ate-bloco-sol').style.display='none';
-    document.getElementById('ate-bloco-esc').style.display='none';
-    document.getElementById('ate-fase1').style.display='none';
-    document.getElementById('ate-fase2').style.display='none';
-    document.getElementById('ate-bloq').style.display='none';
-    document.getElementById('ate-files-list').innerHTML='';
-    document.getElementById('ate-upload-status').innerHTML='';
-    pastaOSAteId=null; pastaOSAteUrl=null; pastaFotosAteId=null; pastaVideosAteId=null; arquivosUploadAte=[];
-  }
+  if(ctx==='ate') _resetAteState_();
+}
+
+function _resetAteState_(){
+  _kitPecas=[]; _pecasRemotas=[];
+  const camposAte=['ate-sol','ate-mot','ate-mot-fisico','ate-fis-relato','ate-fis-horimetro','ate-fis-tempo'];
+  camposAte.forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  const ateRes=document.getElementById('ate-res'); if(ateRes) ateRes.value='';
+  ['ate-bloco-sol','ate-bloco-esc','ate-bloco-fisico',
+   'ate-modo','ate-fase-rem-ini','ate-fase-rem-fin',
+   'ate-fase-fis-ini','ate-fase-fis-fin','ate-bloq'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.style.display='none';
+  });
+  ['ate-files-list','ate-upload-status','ate-kit-list','ate-pecas-remotas',
+   'ate-fis-files-list','ate-fis-upload-status'].forEach(id=>{
+    const el=document.getElementById(id); if(el) el.innerHTML='';
+  });
+  pastaOSAteId=null; pastaOSAteUrl=null; pastaFotosAteId=null; pastaVideosAteId=null; arquivosUploadAte=[];
 }
 
 // ===== UPLOAD DE MÍDIA =====
-let pastaOSId = null;
-let pastaOSUrl = null;
-let pastaFotosId = null;   // subpasta Fotos (triagem)
-let pastaVideosId = null;  // subpasta Vídeos (triagem)
-let arquivosUpload = [];
+var pastaOSId = null;
+var pastaOSUrl = null;
+var pastaFotosId = null;   // subpasta Fotos (triagem)
+var pastaVideosId = null;  // subpasta Vídeos (triagem)
+var arquivosUpload = [];
 
 async function criarSubpasta_(pastaRaizId, nome) {
   const r = await fetch(`${SCRIPT_URL}?action=createFolder&nome=${encodeURIComponent(nome)}&pastaRaizId=${encodeURIComponent(pastaRaizId)}`);
@@ -831,15 +971,16 @@ function irParaAtendimento(){
   const os = osAtualMap['tri'];
   swTab('ate', document.querySelector('.tab:nth-child(2)'));
   if(os) {
-    os.tec = ''; // Vindo da triagem: técnico ainda não foi definido, sempre mostrar fase1
-    osAtualMap['ate'] = os;
+    // Vindo da triagem: técnico ainda não definido, status pode ter mudado — mostrar modo
+    const osFresh = {...os, tec:'', sta: os.sta||'TRIAGEM'};
+    osAtualMap['ate'] = osFresh;
     document.getElementById('ate-os-box').innerHTML=`
-      <div class="os-box-key">${os.key}</div>
-      <div class="os-box-tit">${os.title}</div>
-      <div class="os-box-inf">${os.cli} · ${os.equip} · <b>${os.sta}</b></div>`;
+      <div class="os-box-key">${osFresh.key}</div>
+      <div class="os-box-tit">${osFresh.title}</div>
+      <div class="os-box-inf">${osFresh.cli} · ${osFresh.equip} · <b>${osFresh.sta}</b></div>`;
     document.getElementById('ate-s1').style.display='none';
     document.getElementById('ate-s2').style.display='block';
-    mostrarFaseAtendimento(os);
+    mostrarFaseAtendimento(osFresh);
   }
   novaTri();
 }
@@ -860,83 +1001,308 @@ function novaTri(){
 }
 
 // ===== ABA ATENDIMENTO =====
-let pastaOSAteId = null;
-let pastaOSAteUrl = null;
-let pastaFotosAteId = null;   // subpasta Fotos (atendimento)
-let pastaVideosAteId = null;  // subpasta Vídeos (atendimento)
-let arquivosUploadAte = [];
+var pastaOSAteId = null;
+var pastaOSAteUrl = null;
+var pastaFotosAteId = null;
+var pastaVideosAteId = null;
+var arquivosUploadAte = [];
+var _kitPecas = [];      // kit para conciliação na fase física
+var _pecasRemotas = [];  // peças suspeitas listadas na fase remota
 
 function salvarTecnico(nome){
   if(nome) localStorage.setItem('agritrack_tec', nome);
 }
 
+// ─── Máquina de estados do Atendimento ────────────────────────────────────
 function mostrarFaseAtendimento(os){
   const tecLocal = localStorage.getItem('agritrack_tec') || '';
   const tecOS = os.tec || '';
-  document.getElementById('ate-fase1').style.display='none';
-  document.getElementById('ate-fase2').style.display='none';
-  document.getElementById('ate-bloq').style.display='none';
-  if(!tecOS){
-    document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Iniciar Atendimento';
-    if(tecLocal) document.getElementById('ate-tec-sel').value=tecLocal;
-    document.getElementById('ate-fase1').style.display='block';
-  } else if(tecOS===tecLocal){
-    document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Finalizar Atendimento';
-    document.getElementById('ate-tec-badge').textContent='👤 Atendimento iniciado por: '+tecOS;
-    document.getElementById('ate-fase2').style.display='block';
+  const sta = (os.sta || '').toUpperCase();
+
+  ['ate-modo','ate-fase-rem-ini','ate-fase-rem-fin',
+   'ate-fase-fis-ini','ate-fase-fis-fin','ate-bloq'].forEach(id=>{
+    document.getElementById(id).style.display='none';
+  });
+
+  if(sta.includes('SUPORTE REMOTO')){
+    if(!tecOS || tecOS===tecLocal){
+      document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Finalizar Suporte Remoto';
+      document.getElementById('ate-tec-badge').textContent='📞 Suporte remoto em andamento por: '+(tecOS||tecLocal);
+      document.getElementById('ate-fase-rem-fin').style.display='block';
+    } else {
+      document.getElementById('ate-bloq-txt').innerHTML='Esta OS está em suporte remoto com <b>'+tecOS+'</b>.<br>Apenas esse técnico pode finalizá-la.';
+      document.getElementById('ate-bloq').style.display='block';
+    }
+  } else if(sta.includes('MANUTENÇÃO')||sta.includes('MANUTENCAO')||sta.includes('MANUTEN')){
+    if(!tecOS || tecOS===tecLocal){
+      document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Finalizar Manutenção Física';
+      document.getElementById('ate-tec-badge-fis').textContent='🔧 Manutenção física em andamento por: '+(tecOS||tecLocal);
+      carregarKitPecas(os.key);
+      document.getElementById('ate-fase-fis-fin').style.display='block';
+    } else {
+      document.getElementById('ate-bloq-txt').innerHTML='Esta OS está em manutenção com <b>'+tecOS+'</b>.<br>Apenas esse técnico pode finalizá-la.';
+      document.getElementById('ate-bloq').style.display='block';
+    }
+  } else if(sta.includes('AGUARDANDO PCP')||sta.includes('AGENDAMENTO')){
+    // Diagnóstico remoto feito, PCP preparou kit — próximo passo é físico
+    document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Iniciar Manutenção Física';
+    if(tecLocal) document.getElementById('ate-tec-sel-fis').value=tecLocal;
+    verificarKitExistente(os.key);
+    document.getElementById('ate-fase-fis-ini').style.display='block';
   } else {
-    document.getElementById('ate-bloq-txt').innerHTML='Esta OS está sendo atendida por <b>'+tecOS+'</b>.<br>Apenas esse técnico pode finalizá-la.';
-    document.getElementById('ate-bloq').style.display='block';
+    // Estado inicial: mostrar seletor de modo
+    document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Tipo de Atendimento';
+    document.getElementById('ate-modo').style.display='block';
   }
 }
 
-async function iniciarAtendimento(){
+function selecionarModo(modo){
+  const tecLocal = localStorage.getItem('agritrack_tec') || '';
+  ['ate-modo','ate-fase-rem-ini','ate-fase-fis-ini'].forEach(id=>{
+    document.getElementById(id).style.display='none';
+  });
+  if(modo==='remoto'){
+    document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Suporte Remoto';
+    if(tecLocal) document.getElementById('ate-tec-sel').value=tecLocal;
+    document.getElementById('ate-fase-rem-ini').style.display='block';
+  } else {
+    document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Manutenção Física';
+    if(tecLocal) document.getElementById('ate-tec-sel-fis').value=tecLocal;
+    document.getElementById('ate-kit-aviso').textContent='🔍 Verificando se há kit de peças para esta OS...';
+    document.getElementById('ate-kit-aviso').style.cssText='';
+    document.getElementById('ate-fase-fis-ini').style.display='block';
+    verificarKitExistente(osAtualMap['ate']?.key);
+  }
+}
+
+function voltarModo(){
+  ['ate-fase-rem-ini','ate-fase-rem-fin','ate-fase-fis-ini','ate-fase-fis-fin'].forEach(id=>{
+    document.getElementById(id).style.display='none';
+  });
+  document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Tipo de Atendimento';
+  document.getElementById('ate-modo').style.display='block';
+}
+
+// ─── Suporte Remoto: Iniciar ───────────────────────────────────────────────
+async function iniciarSuporteRemoto(){
   const os=osAtualMap['ate'];
   if(!os){toast('Selecione uma OS','er');return;}
   const tec=document.getElementById('ate-tec-sel').value;
   if(!tec){toast('Selecione seu nome','er');return;}
-
-  load('Iniciando atendimento...');
+  load('Iniciando suporte remoto...');
   try{
     await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:tec}})});
-
     try{
       const r2=await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`);
       const td=await r2.json();
-      const t=(td.transitions||[]).find(t=>t.to?.name?.includes('SUPORTE REMOTO'));
-      const transId=t?.id||'9'; // ID 9 = EM SUPORTE REMOTO (fallback hardcoded)
+      const t=(td.transitions||[]).find(t=>t.to?.name?.toUpperCase().includes('SUPORTE REMOTO'));
+      const transId=t?.id||'9';
       await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`,{method:'POST',body:JSON.stringify({transition:{id:transId}})});
     }catch(transErr){
       console.warn('Transição EM SUPORTE REMOTO falhou:',transErr.message);
-      toast('Atenção: OS não movida para EM SUPORTE REMOTO','al',4000);
+      toast('Atenção: status não atualizado no Jira','al',4000);
     }
-
-    localStorage.setItem('agritrack_tec', tec);
+    localStorage.setItem('agritrack_tec',tec);
     osAtualMap['ate'].tec=tec;
     uload();
-    toast('Atendimento iniciado!','ok',2500);
-    document.getElementById('ate-fase1').style.display='none';
-    document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Finalizar Atendimento';
-    document.getElementById('ate-tec-badge').textContent='👤 Atendimento iniciado por: '+tec;
-    document.getElementById('ate-fase2').style.display='block';
-  }catch(e){
+    toast('Suporte remoto iniciado!','ok',2500);
+    document.getElementById('ate-fase-rem-ini').style.display='none';
+    document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Finalizar Suporte Remoto';
+    document.getElementById('ate-tec-badge').textContent='📞 Suporte remoto em andamento por: '+tec;
+    document.getElementById('ate-fase-rem-fin').style.display='block';
+  }catch(e){uload();toast('Erro: '+e.message,'er',6000);}
+}
+
+// ─── Manutenção Física: Iniciar ────────────────────────────────────────────
+async function iniciarManutencaoFisica(){
+  const os=osAtualMap['ate'];
+  if(!os){toast('Selecione uma OS','er');return;}
+  const tec=document.getElementById('ate-tec-sel-fis').value;
+  if(!tec){toast('Selecione seu nome','er');return;}
+  load('Iniciando manutenção física...');
+  try{
+    await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:tec}})});
+    try{
+      const r2=await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`);
+      const td=await r2.json();
+      const t=(td.transitions||[]).find(t=>{
+        const n=t.to?.name?.toUpperCase()||'';
+        return n.includes('EM MANUTENÇÃO')||n.includes('EM MANUTENCAO')||n.includes('MANUTENÇÃO')&&n.startsWith('EM');
+      });
+      if(t){
+        await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`,{method:'POST',body:JSON.stringify({transition:{id:t.id}})});
+      } else {
+        toast('Atenção: transição EM MANUTENÇÃO não encontrada no Jira','al',5000);
+      }
+    }catch(transErr){
+      console.warn('Transição EM MANUTENÇÃO falhou:',transErr.message);
+      toast('Atenção: status não atualizado no Jira','al',4000);
+    }
+    localStorage.setItem('agritrack_tec',tec);
+    osAtualMap['ate'].tec=tec;
     uload();
-    toast('Erro: '+e.message,'er',6000);
+    toast('Manutenção física iniciada!','ok',2500);
+    document.getElementById('ate-fase-fis-ini').style.display='none';
+    document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Finalizar Manutenção Física';
+    document.getElementById('ate-tec-badge-fis').textContent='🔧 Manutenção física em andamento por: '+tec;
+    await carregarKitPecas(os.key);
+    document.getElementById('ate-fase-fis-fin').style.display='block';
+  }catch(e){uload();toast('Erro: '+e.message,'er',6000);}
+}
+
+// ─── Toggle resultado remoto ───────────────────────────────────────────────
+function toggleAteResult(){
+  const v=document.getElementById('ate-res').value;
+  document.getElementById('ate-bloco-sol').style.display=v==='sim'?'block':'none';
+  document.getElementById('ate-bloco-fisico').style.display=v==='nao_fisico'?'block':'none';
+  document.getElementById('ate-bloco-esc').style.display=(v==='nao_base'||v==='nao_midia')?'block':'none';
+}
+
+// ─── Kit de Peças ──────────────────────────────────────────────────────────
+async function verificarKitExistente(osKey){
+  if(!osKey) return;
+  const aviso=document.getElementById('ate-kit-aviso');
+  try{
+    const r=await jiraFetch(`/rest/api/3/issue/${osKey}/comment?maxResults=50`);
+    const d=await r.json();
+    const comments=(d.comments||[]).slice().reverse();
+    let kitEncontrado=null;
+    for(const c of comments){
+      // Busca tag [KIT_PECAS] dentro do ADF serializado como texto
+      const bodyText=_extrairTextoADF_(c.body||{});
+      const match=bodyText.match(/\[KIT_PECAS\]([\s\S]*?)\[\/KIT_PECAS\]/);
+      if(match){
+        try{ kitEncontrado=JSON.parse(decodeURIComponent(match[1])); break; }
+        catch(e){}
+      }
+    }
+    if(kitEncontrado&&kitEncontrado.length>0){
+      _kitPecas=kitEncontrado.map(p=>({...p,status:null}));
+      if(aviso){
+        aviso.textContent=`📦 Kit com ${_kitPecas.length} peça(s) preparado pelo PCP para esta OS.`;
+        aviso.style.cssText='background:var(--gl);border-color:var(--gr);color:#065f46;margin:10px 12px 0;padding:9px 12px;background:var(--gl);border:1px solid var(--gr);border-radius:var(--rs);font-size:12px;color:#065f46;line-height:1.4';
+      }
+    } else {
+      _kitPecas=[];
+      if(aviso){
+        aviso.textContent='⚠️ Nenhum kit encontrado. Adicione as peças utilizadas manualmente.';
+        aviso.style.cssText='background:var(--al);border-color:var(--am);color:#92400e;margin:10px 12px 0;padding:9px 12px;border:1px solid var(--am);border-radius:var(--rs);font-size:12px;line-height:1.4';
+      }
+    }
+  }catch(e){
+    console.warn('Erro ao verificar kit:',e);
+    _kitPecas=[];
   }
 }
 
-function toggleAteResult(){
-  const v=document.getElementById('ate-res').value;
-  document.getElementById('ate-bloco-esc').style.display=v==='nao'?'block':'none';
-  document.getElementById('ate-bloco-sol').style.display=v==='sim'?'block':'none';
+function _extrairTextoADF_(adf){
+  if(typeof adf==='string') return adf;
+  let txt='';
+  function walk(node){
+    if(!node) return;
+    if(node.text) txt+=node.text;
+    if(node.content) node.content.forEach(walk);
+  }
+  walk(adf);
+  return txt;
 }
 
-async function adicionarMidiasAte(files){
+async function carregarKitPecas(osKey){
+  await verificarKitExistente(osKey);
+  renderizarKitPecas();
+}
+
+function renderizarKitPecas(){
+  const list=document.getElementById('ate-kit-list');
+  const title=document.getElementById('ate-kit-title');
+  if(!list) return;
+  if(_kitPecas.length===0){
+    title.textContent='Peças Utilizadas';
+    list.innerHTML='<div class="ib" style="margin:6px 12px 0">Nenhuma peça pré-listada. Adicione as peças utilizadas abaixo.</div>';
+    return;
+  }
+  title.textContent=`Kit de Peças Previstas (${_kitPecas.length})`;
+  list.innerHTML='';
+  _kitPecas.forEach((p,i)=>{
+    if(p.extra) return; // extras adicionados in-loco já têm próprio elemento
+    const item=document.createElement('div');
+    item.className='kit-item'; item.id='kit-item-'+i;
+    item.innerHTML=`
+      <div class="kit-item-hdr">
+        <span class="kit-item-cod">${p.cod||'—'}</span>
+        <span class="kit-item-nm">${p.nome||'—'}</span>
+        <span class="kit-item-qty">Qtd: ${p.qty||1}</span>
+      </div>
+      <div class="kit-opts">
+        <div class="kit-opt${p.status==='aplicada'?' sel-ok':''}" onclick="setKitStatus(${i},'aplicada')">✅ Aplicada</div>
+        <div class="kit-opt${p.status==='devolvida'?' sel-dev':''}" onclick="setKitStatus(${i},'devolvida')">↩ Devolvida</div>
+        <div class="kit-opt${p.status==='danificada'?' sel-dan':''}" onclick="setKitStatus(${i},'danificada')">⚠️ Danificada</div>
+      </div>`;
+    list.appendChild(item);
+  });
+}
+
+function setKitStatus(idx,status){
+  if(!_kitPecas[idx]) return;
+  _kitPecas[idx].status=status;
+  const item=document.getElementById('kit-item-'+idx);
+  if(!item) return;
+  const opts=item.querySelectorAll('.kit-opt');
+  if(opts[0]) opts[0].className='kit-opt'+(status==='aplicada'?' sel-ok':'');
+  if(opts[1]) opts[1].className='kit-opt'+(status==='devolvida'?' sel-dev':'');
+  if(opts[2]) opts[2].className='kit-opt'+(status==='danificada'?' sel-dan':'');
+}
+
+function adicionarPecaExtra(){
+  const idx=_kitPecas.length;
+  _kitPecas.push({cod:'',nome:'',qty:1,status:null,extra:true});
+  const list=document.getElementById('ate-kit-list');
+  const item=document.createElement('div');
+  item.className='kit-item'; item.id='kit-item-'+idx;
+  item.style.border='1.5px dashed var(--gr)';
+  item.innerHTML=`
+    <div class="kit-item-hdr">
+      <input placeholder="Código" style="width:76px;border:1px solid var(--bd);border-radius:5px;padding:5px 8px;font-size:12px"
+        oninput="_kitPecas[${idx}].cod=this.value">
+      <input placeholder="Nome da peça" style="flex:1;min-width:100px;border:1px solid var(--bd);border-radius:5px;padding:5px 8px;font-size:12px"
+        oninput="_kitPecas[${idx}].nome=this.value">
+      <input type="number" placeholder="Qtd" value="1" style="width:52px;border:1px solid var(--bd);border-radius:5px;padding:5px 8px;font-size:12px"
+        oninput="_kitPecas[${idx}].qty=this.value">
+    </div>
+    <div class="kit-opts">
+      <div class="kit-opt" onclick="setKitStatus(${idx},'aplicada')">✅ Aplicada</div>
+      <div class="kit-opt" onclick="setKitStatus(${idx},'devolvida')">↩ Devolvida</div>
+      <div class="kit-opt" onclick="setKitStatus(${idx},'danificada')">⚠️ Danificada</div>
+    </div>`;
+  list.appendChild(item);
+}
+
+function adicionarPecaRemota(){
+  const idx=_pecasRemotas.length;
+  _pecasRemotas.push({cod:'',nome:'',qty:1});
+  const list=document.getElementById('ate-pecas-remotas');
+  const item=document.createElement('div');
+  item.className='kit-item';
+  item.style.cssText='border:1.5px dashed var(--bl);margin:6px 12px';
+  item.innerHTML=`
+    <div class="kit-item-hdr">
+      <input placeholder="Código" style="width:76px;border:1px solid var(--bd);border-radius:5px;padding:5px 8px;font-size:12px"
+        oninput="_pecasRemotas[${idx}].cod=this.value">
+      <input placeholder="Nome / descrição" style="flex:1;min-width:100px;border:1px solid var(--bd);border-radius:5px;padding:5px 8px;font-size:12px"
+        oninput="_pecasRemotas[${idx}].nome=this.value">
+      <input type="number" placeholder="Qtd" value="1" style="width:52px;border:1px solid var(--bd);border-radius:5px;padding:5px 8px;font-size:12px"
+        oninput="_pecasRemotas[${idx}].qty=this.value">
+    </div>`;
+  list.appendChild(item);
+}
+
+// ─── Upload de mídia (atendimento) ────────────────────────────────────────
+async function adicionarMidiasAte(files,ctx){
   if(!osAtualMap['ate']){toast('Selecione uma OS primeiro','er');return;}
   if(!files||files.length===0) return;
   const os=osAtualMap['ate'];
-  const filesList=document.getElementById('ate-files-list');
-  const statusEl=document.getElementById('ate-upload-status');
+  const filesList=document.getElementById(ctx==='fis'?'ate-fis-files-list':'ate-files-list');
+  const statusEl=document.getElementById(ctx==='fis'?'ate-fis-upload-status':'ate-upload-status');
 
   if(!pastaOSAteId){
     statusEl.innerHTML='<div class="ib" style="margin:0">⏳ Criando pasta no Drive...</div>';
@@ -956,11 +1322,9 @@ async function adicionarMidiasAte(files){
     const isVideo=file.type.startsWith('video');
     statusEl.innerHTML=`<div class="ib" style="margin:0">⏳ Enviando ${i+1}/${files.length}: ${file.name}...</div>`;
     try{
-      // Criar subpasta se necessário
       if(isVideo && !pastaVideosAteId) pastaVideosAteId=await criarSubpasta_(pastaOSAteId,'Vídeos');
       if(!isVideo && !pastaFotosAteId) pastaFotosAteId=await criarSubpasta_(pastaOSAteId,'Fotos');
       const destPastaId=isVideo?pastaVideosAteId:pastaFotosAteId;
-
       const base64=await new Promise((res,rej)=>{const rd=new FileReader();rd.onload=()=>res(rd.result.split(',')[1]);rd.onerror=rej;rd.readAsDataURL(file);});
       const r=await fetch(SCRIPT_URL,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},
         body:'action=uploadFile&pastaId='+encodeURIComponent(destPastaId)+'&nomeArquivo='+encodeURIComponent(file.name)+'&mimeType='+encodeURIComponent(file.type)+'&base64='+encodeURIComponent(base64)});
@@ -970,8 +1334,7 @@ async function adicionarMidiasAte(files){
       const item=document.createElement('div');
       item.style.cssText='display:flex;align-items:center;gap:8px;padding:7px 10px;background:#fff;border:1px solid var(--bd);border-radius:6px;margin-top:6px';
       const icon=isVideo?'🎥':'📷';
-      const subLabel=isVideo?'Vídeos/':'Fotos/';
-      item.innerHTML=`<span style="font-size:18px">${icon}</span><div style="flex:1"><div style="font-size:12px;font-weight:600">${file.name}</div><div style="font-size:11px;color:var(--gr)">✓ Salvo em ${subLabel}</div></div>`;
+      item.innerHTML=`<span style="font-size:18px">${icon}</span><div style="flex:1"><div style="font-size:12px;font-weight:600">${file.name}</div><div style="font-size:11px;color:var(--gr)">✓ Enviado</div></div>`;
       filesList.appendChild(item);
     }catch(e){
       const item=document.createElement('div');
@@ -983,26 +1346,22 @@ async function adicionarMidiasAte(files){
   statusEl.innerHTML=`<div class="ib" style="margin:0;background:var(--gl);border-color:var(--gr);color:var(--gr)">✅ ${arquivosUploadAte.length} arquivo(s) enviado(s)!</div>`;
 }
 
-async function finalizarAtendimento(){
+// ─── Finalizar Atendimento Remoto ─────────────────────────────────────────
+async function finalizarAtendimentoRemoto(){
   const os=osAtualMap['ate'];
   if(!os){toast('Selecione uma OS','er');return;}
   const tec=os.tec||localStorage.getItem('agritrack_tec')||'';
   const res=document.getElementById('ate-res').value;
   if(!res){toast('Selecione o resultado do atendimento','er');return;}
-  const resolvido=res==='sim';
-  if(resolvido){
-    if(!document.getElementById('ate-sol').value.trim()){toast('Descreva a solução aplicada','er');return;}
-  }else{
-    if(!document.getElementById('ate-cam').value||!document.getElementById('ate-mot').value.trim()){
-      toast('Preencha Recomendação de Caminho e Motivo','er');return;
-    }
-  }
+
+  if(res==='sim'&&!document.getElementById('ate-sol').value.trim()){toast('Descreva a solução aplicada','er');return;}
+  if(res==='nao_fisico'&&!document.getElementById('ate-mot-fisico').value.trim()){toast('Descreva o diagnóstico remoto','er');return;}
+  if((res==='nao_base'||res==='nao_midia')&&!document.getElementById('ate-mot').value.trim()){toast('Descreva o motivo do escalonamento','er');return;}
 
   if(window._ateSaving) return;
   window._ateSaving=true;
   load('Salvando atendimento...');
   try{
-    // 1. Criar pasta no Drive se não existe
     if(!pastaOSAteId){
       const rp=await fetch(`${SCRIPT_URL}?action=createFolder&nome=${encodeURIComponent(os.key)}&pastaRaizId=1zOu6023SHjNChj2P0HxAVlrBvZWUZ5v0`);
       const dp=await rp.json();
@@ -1010,96 +1369,169 @@ async function finalizarAtendimento(){
       pastaOSAteId=dp.id; pastaOSAteUrl=dp.url;
     }
 
-    // 2. Gerar PDF de atendimento
+    const resolvido=res==='sim';
+    const precisaFisico=res==='nao_fisico';
     load('Gerando PDF de atendimento...');
-    const camSel=document.getElementById('ate-cam');
-    const camTexto=resolvido?'':camSel.options[camSel.selectedIndex]?.text||'';
     const payload={
       pastaId:pastaOSAteId,
       atendimento:{
-        osKey:os.key, equip:os.equip, tec:tec,
-        data:new Date().toLocaleString('pt-BR'),
-        resolvido:resolvido,
+        osKey:os.key,equip:os.equip,tec:tec,tipo:'remoto',
+        data:new Date().toLocaleString('pt-BR'),resolvido:resolvido,
         solucao:resolvido?document.getElementById('ate-sol').value.trim():'',
-        caminho:camTexto,
-        motivo:!resolvido?document.getElementById('ate-mot').value.trim():''
+        motivo:precisaFisico?document.getElementById('ate-mot-fisico').value.trim():document.getElementById('ate-mot').value.trim(),
+        pecasSuspeitas:precisaFisico?_pecasRemotas.filter(p=>p.nome.trim()):[]
       },
       imagens:arquivosUploadAte.map(a=>({id:a.id,nome:a.nome,mimeType:a.mimeType||'image/jpeg'}))
     };
     const pdfResp=await fetch(SCRIPT_URL+'?action=relatorioAtendimento',{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)});
     const pdfData=await pdfResp.json();
-    console.log('PDF atendimento:', pdfData);
+    console.log('PDF atendimento remoto:',pdfData);
 
-    // 3. Atualizar campos no Jira
     load('Atualizando Jira...');
     const fields={customfield_10048:tec};
-    if(resolvido){
-      fields.customfield_10044=toADF(document.getElementById('ate-sol').value.trim());
-    }else{
-      fields.customfield_10047={id:document.getElementById('ate-cam').value};
-      fields.customfield_10046=toADF(document.getElementById('ate-mot').value.trim());
-    }
+    if(resolvido) fields.customfield_10044=toADF(document.getElementById('ate-sol').value.trim());
+    else fields.customfield_10046=toADF(precisaFisico?document.getElementById('ate-mot-fisico').value.trim():document.getElementById('ate-mot').value.trim());
     await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields})});
 
-    // 4. Transição de status
+    // Salvar kit de peças em comentário Jira para o PCP e para o técnico físico ler depois
+    if(precisaFisico){
+      const pecasValidas=_pecasRemotas.filter(p=>p.nome.trim());
+      const kitTag=pecasValidas.length>0
+        ?'\n[KIT_PECAS]'+encodeURIComponent(JSON.stringify(pecasValidas))+'[/KIT_PECAS]':'';
+      const resumoPecas=pecasValidas.length>0
+        ?`\n\nPeças listadas:\n${pecasValidas.map((p,i)=>`${i+1}. [${p.cod||'—'}] ${p.nome} — Qtd: ${p.qty||1}`).join('\n')}`:'';
+      const comentario={body:toADF(`📦 Diagnóstico Remoto — Encaminhado para Manutenção Física\n\n${document.getElementById('ate-mot-fisico').value.trim()}${resumoPecas}\n\nTécnico: ${tec} | Data: ${new Date().toLocaleString('pt-BR')}${kitTag}`)};
+      try{ await jiraFetch(`/rest/api/3/issue/${os.key}/comment`,{method:'POST',body:JSON.stringify(comentario)}); }
+      catch(e){ console.warn('Falhou salvar kit no Jira:',e); }
+    }
+
+    // Transição de status
     const r2=await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`);
     const td=await r2.json();
+    const trans=td.transitions||[];
     let transId=null;
     if(resolvido){
-      transId='41'; // ID fixo: Concluído
-    }else{
-      // Mapeia caminho escolhido → transição Jira correta
-      const camVal=document.getElementById('ate-cam').value;
-      const CAMINHO_TRANS={
-        '10022':'3', // In loco → AGUARDANDO DESLOCAMENTO
-        '10023':'2', // Enviar para base → AGUARDANDO CHEGADA – BASE
-        '10024':'4'  // Análise por mídia → ANÁLISE REMOTA / MÍDIA
-      };
-      transId=CAMINHO_TRANS[camVal]||
-        (td.transitions||[]).find(t=>t.to?.name?.includes('AGUARDANDO')||t.to?.name?.includes('ANÁLISE'))?.id||'3';
+      const tHom=trans.find(t=>{const n=t.to?.name?.toUpperCase()||'';return n.includes('HOMOLOGAÇÃO')||n.includes('HOMOLOGACAO');});
+      const tConc=trans.find(t=>{const n=t.to?.name?.toUpperCase()||'';return n.includes('CONCLUÍDO')||n.includes('CONCLUIDO');});
+      transId=tHom?.id||tConc?.id||'41';
+    } else if(precisaFisico){
+      const tPCP=trans.find(t=>{const n=t.to?.name?.toUpperCase()||'';return n.includes('AGUARDANDO PCP')||n.includes('AGENDAMENTO');});
+      transId=tPCP?.id||null;
+      if(!transId) toast('Atenção: crie o status AGUARDANDO PCP/AGENDAMENTO no Jira','al',6000);
+    } else if(res==='nao_base'){
+      transId=trans.find(t=>t.to?.name?.toUpperCase().includes('CHEGADA'))?.id||'2';
+    } else if(res==='nao_midia'){
+      transId=trans.find(t=>{const n=t.to?.name?.toUpperCase()||'';return n.includes('ANÁLISE')||n.includes('ANALISE')||n.includes('MÍDIA');})?.id||'4';
     }
     if(transId) await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`,{method:'POST',body:JSON.stringify({transition:{id:transId}})});
 
-    // 5. Limpar campo técnico para liberar OS para futuros atendimentos
-    try{
-      await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:null}})});
-    }catch(e){ console.warn('Não foi possível limpar campo técnico:', e.message); }
+    try{ await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:null}})}); }
+    catch(e){ console.warn('Não foi possível limpar campo técnico:',e.message); }
 
-    uload();
-    window._ateSaving=false;
-    document.getElementById('ate-s3-icon').textContent=resolvido?'✅':'📤';
-    document.getElementById('ate-s3-tit').textContent=resolvido?'OS Concluída!':'Escalonado para a Fabi!';
-    document.getElementById('ate-s3-txt').innerHTML=resolvido
-      ?`OS <b>${os.key}</b> marcada como <b>Concluída</b>.<br>PDF salvo no Drive.`
-      :`OS <b>${os.key}</b> encaminhada para a <b>Fabi</b>.<br>Caminho: <b>${camTexto}</b><br>PDF salvo no Drive.`;
+    uload(); window._ateSaving=false;
+    let icon,titulo,texto;
+    if(resolvido){icon='✅';titulo='OS Concluída!';texto=`OS <b>${os.key}</b> enviada para homologação.<br>PDF salvo no Drive.`;}
+    else if(precisaFisico){icon='📦';titulo='Encaminhado para PCP!';texto=`OS <b>${os.key}</b> aguardando PCP preparar kit.<br>${_pecasRemotas.filter(p=>p.nome.trim()).length} peça(s) listada(s).`;}
+    else{icon='📤';titulo='Escalonado!';texto=`OS <b>${os.key}</b> encaminhada.<br>PDF salvo no Drive.`;}
+    document.getElementById('ate-s3-icon').textContent=icon;
+    document.getElementById('ate-s3-tit').textContent=titulo;
+    document.getElementById('ate-s3-txt').innerHTML=texto;
     document.getElementById('ate-s2').style.display='none';
     document.getElementById('ate-s3').style.display='block';
-  }catch(e){
-    uload();
-    window._ateSaving=false;
-    toast('Erro: '+e.message,'er',6000);
+  }catch(e){uload();window._ateSaving=false;toast('Erro: '+e.message,'er',6000);}
+}
+
+// ─── Finalizar Manutenção Física ──────────────────────────────────────────
+async function finalizarManutencaoFisica(){
+  const os=osAtualMap['ate'];
+  if(!os){toast('Selecione uma OS','er');return;}
+  const tec=os.tec||localStorage.getItem('agritrack_tec')||'';
+  const relato=document.getElementById('ate-fis-relato').value.trim();
+  if(!relato){toast('Descreva o relato da execução','er');return;}
+
+  // Validar que todas as peças do kit têm status marcado
+  const kitSemStatus=_kitPecas.filter(p=>!p.status);
+  if(kitSemStatus.length>0){
+    toast(`Marque o status de ${kitSemStatus.length} peça(s): Aplicada, Devolvida ou Danificada`,'er',5000);
+    return;
   }
+
+  if(window._ateSaving) return;
+  window._ateSaving=true;
+  load('Salvando manutenção...');
+  try{
+    if(!pastaOSAteId){
+      const rp=await fetch(`${SCRIPT_URL}?action=createFolder&nome=${encodeURIComponent(os.key)}&pastaRaizId=1zOu6023SHjNChj2P0HxAVlrBvZWUZ5v0`);
+      const dp=await rp.json();
+      if(dp.error) throw new Error('Erro ao criar pasta: '+dp.error);
+      pastaOSAteId=dp.id; pastaOSAteUrl=dp.url;
+    }
+
+    load('Gerando relatório de manutenção...');
+    const payload={
+      pastaId:pastaOSAteId,
+      atendimento:{
+        osKey:os.key,equip:os.equip,tec:tec,tipo:'fisico',
+        data:new Date().toLocaleString('pt-BR'),
+        relato:relato,
+        horimetro:document.getElementById('ate-fis-horimetro').value||'',
+        tempoExecucao:document.getElementById('ate-fis-tempo').value||'',
+        pecas:_kitPecas
+      },
+      imagens:arquivosUploadAte.map(a=>({id:a.id,nome:a.nome,mimeType:a.mimeType||'image/jpeg'}))
+    };
+    const pdfResp=await fetch(SCRIPT_URL+'?action=relatorioAtendimento',{method:'POST',headers:{'Content-Type':'text/plain'},body:JSON.stringify(payload)});
+    console.log('PDF manutenção:',await pdfResp.json());
+
+    load('Atualizando Jira...');
+    await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:tec,customfield_10044:toADF(relato)}})});
+
+    // Comentário de conciliação de insumos
+    if(_kitPecas.length>0){
+      const aplicadas=_kitPecas.filter(p=>p.status==='aplicada');
+      const devolvidas=_kitPecas.filter(p=>p.status==='devolvida');
+      const danificadas=_kitPecas.filter(p=>p.status==='danificada');
+      const resumo=`🔧 Conciliação de Insumos — Manutenção Física\n\n`+
+        (aplicadas.length?`✅ Aplicadas (${aplicadas.length}):\n${aplicadas.map(p=>`• [${p.cod||'—'}] ${p.nome} x${p.qty||1}`).join('\n')}\n\n`:'')+
+        (devolvidas.length?`↩ Devolvidas/Não Utilizadas (${devolvidas.length}):\n${devolvidas.map(p=>`• [${p.cod||'—'}] ${p.nome} x${p.qty||1}`).join('\n')}\n\n`:'')+
+        (danificadas.length?`⚠️ Danificadas na Instalação (${danificadas.length}):\n${danificadas.map(p=>`• [${p.cod||'—'}] ${p.nome} x${p.qty||1}`).join('\n')}\n\n`:'')+
+        `Técnico: ${tec} | Data: ${new Date().toLocaleString('pt-BR')}`;
+      try{ await jiraFetch(`/rest/api/3/issue/${os.key}/comment`,{method:'POST',body:JSON.stringify({body:toADF(resumo)})}); }
+      catch(e){ console.warn('Falhou comentário conciliação:',e); }
+    }
+
+    // Transição → AGUARDANDO HOMOLOGAÇÃO (preferencial) ou CONCLUÍDO
+    const r2=await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`);
+    const td=await r2.json();
+    const trans=td.transitions||[];
+    const tHom=trans.find(t=>{const n=t.to?.name?.toUpperCase()||'';return n.includes('HOMOLOGAÇÃO')||n.includes('HOMOLOGACAO');});
+    const tConc=trans.find(t=>{const n=t.to?.name?.toUpperCase()||'';return n.includes('CONCLUÍDO')||n.includes('CONCLUIDO');});
+    const transId=tHom?.id||tConc?.id||'41';
+    await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`,{method:'POST',body:JSON.stringify({transition:{id:transId}})});
+
+    try{ await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:null}})}); }
+    catch(e){ console.warn('Não foi possível limpar campo técnico:',e.message); }
+
+    uload(); window._ateSaving=false;
+    const aplicadas=_kitPecas.filter(p=>p.status==='aplicada').length;
+    document.getElementById('ate-s3-icon').textContent='🔧';
+    document.getElementById('ate-s3-tit').textContent=tHom?'Aguardando Homologação!':'Manutenção Concluída!';
+    document.getElementById('ate-s3-txt').innerHTML=`OS <b>${os.key}</b> ${tHom?'enviada para validação pela Fabi':'marcada como Concluída'}.<br>${aplicadas} peça(s) aplicada(s).<br>Relatório salvo no Drive.`;
+    document.getElementById('ate-s2').style.display='none';
+    document.getElementById('ate-s3').style.display='block';
+  }catch(e){uload();window._ateSaving=false;toast('Erro: '+e.message,'er',6000);}
 }
 
 function novoAte(){
   osAtualMap['ate']=null;
-  pastaOSAteId=null; pastaOSAteUrl=null; pastaFotosAteId=null; pastaVideosAteId=null; arquivosUploadAte=[];
-  ['ate-sol','ate-mot'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
-  document.getElementById('ate-res').value='';
-  document.getElementById('ate-bloco-sol').style.display='none';
-  document.getElementById('ate-bloco-esc').style.display='none';
-  document.getElementById('ate-fase1').style.display='none';
-  document.getElementById('ate-fase2').style.display='none';
-  document.getElementById('ate-bloq').style.display='none';
-  document.getElementById('ate-files-list').innerHTML='';
-  document.getElementById('ate-upload-status').innerHTML='';
+  _resetAteState_();
   document.getElementById('ate-s3').style.display='none';
   document.getElementById('ate-s1').style.display='block';
 }
 
 // ===== CHECKLIST =====
-const STATE={}, OBS={}, QTY={}, FOTOS={};
-let secIdx=0, equipSel=null;
+var STATE={}, OBS={}, QTY={}, FOTOS={};
+var secIdx=0, equipSel=null;
 function ik(sid,cod,i){return `${sid}_${cod}_${i}`;}
 
 function selEquip(nome){
