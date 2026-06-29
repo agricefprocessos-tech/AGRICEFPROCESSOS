@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img">
+  <title>AgriTrack</title>
+  <desc>Folha branca estilizada com chave de fenda verde-escura sobreposta, sobre fundo verde sólido.</desc>
+
+  <!-- Fundo: bleed total (necessário para ícones maskable) -->
+  <rect x="0" y="0" width="512" height="512" fill="#1a7a4a"/>
+
+  <!-- Folha: forma de "olho" com ponta no topo e na base, clássica e legível em miniatura -->
+  <path d="M256 108
+           C 326 160, 326 262, 256 322
+           C 186 262, 186 160, 256 108
+           Z"
+        fill="#ffffff"/>
+  <path d="M256 115 L256 312"
+        stroke="#1a7a4a" stroke-width="6" stroke-linecap="round" fill="none" opacity="0.4"/>
+
+  <!-- Chave de fenda: cabo (bulbo) + lâmina + ponta, mais espessa para sobreviver em miniatura; halo branco por baixo para contraste sobre o fundo verde -->
+  <g transform="translate(300,300) rotate(40)">
+    <rect x="-21" y="-99" width="42" height="48" rx="21" fill="#ffffff"/>
+    <rect x="-10.5" y="-53" width="19" height="72" rx="7" fill="#ffffff"/>
+    <rect x="-13" y="13" width="24" height="13" rx="4" fill="#ffffff"/>
+    <rect x="-17" y="-95" width="34" height="44" rx="17" fill="#155d38"/>
+    <rect x="-6.5" y="-51" width="13" height="68" rx="5" fill="#155d38"/>
+    <rect x="-9" y="15" width="18" height="9" rx="2" fill="#155d38"/>
+  </g>
+</svg>
