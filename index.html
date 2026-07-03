@@ -66,6 +66,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .btn-gr:disabled{background:#9ca3af;cursor:not-allowed}
 .btn-gy{background:var(--ly);color:var(--t2)}
 .btn-bl{background:var(--bl);color:#fff}
+.btn-am{background:var(--am);color:#fff}
 .bw{padding:4px 12px 12px}
 .eg{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;padding:12px}
 .eb{padding:14px 6px;background:#fff;border:2px solid var(--bd);border-radius:var(--rs);text-align:center;cursor:pointer;font-size:12px;font-weight:600;color:var(--tx);transition:.15s}
@@ -152,6 +153,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 .modo-btn .ms{font-size:11px;color:var(--t2);margin-top:1px;line-height:1.3}
 .modo-btn.remoto{border-color:var(--bl);background:var(--bll)}
 .modo-btn.fisico{border-color:var(--gr);background:var(--gl)}
+.modo-btn.levantamento{border-color:var(--am);background:var(--al);grid-column:1/-1}
 /* Kit de peças */
 .kit-item{background:#fff;border:1px solid var(--bd);border-radius:var(--rs);margin:6px 12px;overflow:hidden}
 .kit-item-hdr{padding:10px 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -360,8 +362,13 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           <div class="mt">Manutenção Física</div>
           <div class="ms">Presença in-loco ou na base</div>
         </div>
+        <div class="modo-btn levantamento" onclick="selecionarModo('levantamento')">
+          <div class="mi">📋</div>
+          <div class="mt">Levantamento de Peças</div>
+          <div class="ms">Visita só para orçamento — sem reparo</div>
+        </div>
       </div>
-      <div class="ib">Suporte Remoto moverá a OS para <b>EM SUPORTE REMOTO</b>. Manutenção Física moverá para <b>EM MANUTENÇÃO</b>.</div>
+      <div class="ib">Suporte Remoto moverá a OS para <b>EM SUPORTE REMOTO</b>. Manutenção Física moverá para <b>EM MANUTENÇÃO</b>. Levantamento de Peças moverá para <b>EM LEVANTAMENTO</b> e abrirá o Checklist.</div>
     </div>
 
     <!-- ── FASE REMOTA: Iniciar ── -->
@@ -555,6 +562,39 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
     </div>
 
+    <!-- ── LEVANTAMENTO DE PEÇAS: Iniciar ── -->
+    <div id="ate-fase-lev-ini" style="display:none">
+      <div class="card" style="margin-top:10px">
+        <div class="ch">Técnico Responsável</div>
+        <div class="cb">
+          <div class="f req">
+            <label>Seu Nome</label>
+            <select id="ate-tec-sel-lev" onchange="salvarTecnico(this.value)">
+              <option value="">Selecione...</option>
+              <option value="Welington Souza">Welington Souza</option>
+              <option value="Ricardo Miguel">Ricardo Miguel</option>
+              <option value="Andre Henrrique">Andre Henrrique</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="ib">📋 Esta visita é só para levantar peças e compor o orçamento — nenhum reparo será feito. Ao iniciar, o card será movido para <b>EM LEVANTAMENTO</b> e o Checklist do equipamento será aberto automaticamente.</div>
+      <div class="bw">
+        <button class="btn btn-am" onclick="iniciarLevantamentoPecas()">📋 Iniciar Levantamento →</button>
+        <button class="btn btn-gy" style="margin-top:8px" onclick="voltarModo()">← Voltar</button>
+      </div>
+    </div>
+
+    <!-- ── LEVANTAMENTO DE PEÇAS: Em andamento (retomar) ── -->
+    <div id="ate-fase-lev-fin" style="display:none">
+      <div class="ib blue" id="ate-tec-badge-lev" style="margin-top:10px"></div>
+      <div class="ib">O levantamento é feito na aba <b>Checklist</b>. Toque abaixo para continuar de onde parou.</div>
+      <div class="bw">
+        <button class="btn btn-am" onclick="continuarLevantamento()">📋 Abrir Checklist →</button>
+        <button class="btn btn-gy" style="margin-top:8px" onclick="trocarOS('ate')">← Voltar</button>
+      </div>
+    </div>
+
     <!-- BLOQUEADO: outro técnico está atendendo -->
     <div id="ate-bloq" style="display:none">
       <div class="sc" style="padding:30px 20px">
@@ -594,6 +634,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           oninput="this.value=this.value.toUpperCase().trim();if(this.value&&!this.value.startsWith('OS-')&&/^\d+$/.test(this.value))this.value='OS-'+this.value">
       </div>
     </div>
+    <div id="chk-lev-banner" class="ib" style="display:none"></div>
     <div class="eg">
       <div class="eb" onclick="selEquip('Hauler')"><span class="ei">🚜</span>Hauler</div>
       <div class="eb" onclick="selEquip('Sider')"><span class="ei">🔧</span>Sider</div>
@@ -775,7 +816,8 @@ function _resetAteState_(){
   const ateRes=document.getElementById('ate-res'); if(ateRes) ateRes.value='';
   ['ate-bloco-sol','ate-bloco-esc','ate-bloco-fisico',
    'ate-modo','ate-fase-rem-ini','ate-fase-rem-fin',
-   'ate-fase-fis-ini','ate-fase-fis-fin','ate-bloq'].forEach(id=>{
+   'ate-fase-fis-ini','ate-fase-fis-fin',
+   'ate-fase-lev-ini','ate-fase-lev-fin','ate-bloq'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.style.display='none';
   });
   ['ate-files-list','ate-upload-status','ate-kit-list','ate-pecas-remotas',
@@ -1031,7 +1073,8 @@ function mostrarFaseAtendimento(os){
   const sta = (os.sta || '').toUpperCase();
 
   ['ate-modo','ate-fase-rem-ini','ate-fase-rem-fin',
-   'ate-fase-fis-ini','ate-fase-fis-fin','ate-bloq'].forEach(id=>{
+   'ate-fase-fis-ini','ate-fase-fis-fin',
+   'ate-fase-lev-ini','ate-fase-lev-fin','ate-bloq'].forEach(id=>{
     document.getElementById(id).style.display='none';
   });
 
@@ -1060,6 +1103,15 @@ function mostrarFaseAtendimento(os){
     if(tecLocal) document.getElementById('ate-tec-sel-fis').value=tecLocal;
     verificarKitExistente(os.key);
     document.getElementById('ate-fase-fis-ini').style.display='block';
+  } else if(sta.includes('LEVANTAMENTO')){
+    if(!tecOS || tecOS===tecLocal){
+      document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Levantamento em Andamento';
+      document.getElementById('ate-tec-badge-lev').textContent='📋 Levantamento de peças em andamento por: '+(tecOS||tecLocal);
+      document.getElementById('ate-fase-lev-fin').style.display='block';
+    } else {
+      document.getElementById('ate-bloq-txt').innerHTML='Esta OS está em levantamento de peças com <b>'+tecOS+'</b>.<br>Apenas esse técnico pode continuá-la.';
+      document.getElementById('ate-bloq').style.display='block';
+    }
   } else {
     // Estado inicial: mostrar seletor de modo
     document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Tipo de Atendimento';
@@ -1069,13 +1121,17 @@ function mostrarFaseAtendimento(os){
 
 function selecionarModo(modo){
   const tecLocal = localStorage.getItem('agritrack_tec') || '';
-  ['ate-modo','ate-fase-rem-ini','ate-fase-fis-ini'].forEach(id=>{
+  ['ate-modo','ate-fase-rem-ini','ate-fase-fis-ini','ate-fase-lev-ini'].forEach(id=>{
     document.getElementById(id).style.display='none';
   });
   if(modo==='remoto'){
     document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Suporte Remoto';
     if(tecLocal) document.getElementById('ate-tec-sel').value=tecLocal;
     document.getElementById('ate-fase-rem-ini').style.display='block';
+  } else if(modo==='levantamento'){
+    document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Levantamento de Peças';
+    if(tecLocal) document.getElementById('ate-tec-sel-lev').value=tecLocal;
+    document.getElementById('ate-fase-lev-ini').style.display='block';
   } else {
     document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Manutenção Física';
     if(tecLocal) document.getElementById('ate-tec-sel-fis').value=tecLocal;
@@ -1087,7 +1143,8 @@ function selecionarModo(modo){
 }
 
 function voltarModo(){
-  ['ate-fase-rem-ini','ate-fase-rem-fin','ate-fase-fis-ini','ate-fase-fis-fin'].forEach(id=>{
+  ['ate-fase-rem-ini','ate-fase-rem-fin','ate-fase-fis-ini','ate-fase-fis-fin',
+   'ate-fase-lev-ini','ate-fase-lev-fin'].forEach(id=>{
     document.getElementById(id).style.display='none';
   });
   document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Tipo de Atendimento';
@@ -1159,6 +1216,54 @@ async function iniciarManutencaoFisica(){
     await carregarKitPecas(os.key);
     document.getElementById('ate-fase-fis-fin').style.display='block';
   }catch(e){uload();toast('Erro: '+e.message,'er',6000);}
+}
+
+// ─── Levantamento de Peças: Iniciar ────────────────────────────────────────
+async function iniciarLevantamentoPecas(){
+  const os=osAtualMap['ate'];
+  if(!os){toast('Selecione uma OS','er');return;}
+  const tec=document.getElementById('ate-tec-sel-lev').value;
+  if(!tec){toast('Selecione seu nome','er');return;}
+  load('Iniciando levantamento de peças...');
+  try{
+    await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:tec}})});
+    try{
+      const r2=await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`);
+      const td=await r2.json();
+      const t=(td.transitions||[]).find(t=>t.to?.name?.toUpperCase().includes('LEVANTAMENTO'));
+      if(t){
+        await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`,{method:'POST',body:JSON.stringify({transition:{id:t.id}})});
+      } else {
+        toast('Atenção: crie o status EM LEVANTAMENTO no Jira para rastrear esta etapa','al',5000);
+      }
+    }catch(transErr){
+      console.warn('Transição EM LEVANTAMENTO falhou:',transErr.message);
+      toast('Atenção: status não atualizado no Jira','al',4000);
+    }
+    localStorage.setItem('agritrack_tec',tec);
+    osAtualMap['ate'].tec=tec;
+    uload();
+    toast('Levantamento iniciado! Abrindo checklist...','ok',2500);
+    abrirChecklistDeAtendimento(os.key,tec,os.equip);
+  }catch(e){uload();toast('Erro: '+e.message,'er',6000);}
+}
+
+function continuarLevantamento(){
+  const os=osAtualMap['ate'];
+  if(!os){toast('Selecione uma OS','er');return;}
+  const tec=os.tec||localStorage.getItem('agritrack_tec')||'';
+  abrirChecklistDeAtendimento(os.key,tec,os.equip);
+}
+
+function abrirChecklistDeAtendimento(osKey,tec,equip){
+  _levantamentoCtx={osKey,tec};
+  swTab('chk', document.querySelector('.tab:nth-child(3)'));
+  const inp=document.getElementById('chk-os-key');
+  inp.value=osKey; inp.readOnly=true; inp.style.background='#eee';
+  const banner=document.getElementById('chk-lev-banner');
+  banner.textContent=`📋 Levantamento de Peças — OS ${osKey} · Técnico: ${tec}`;
+  banner.style.display='block';
+  if(['Hauler','Sider'].includes(equip)) selEquip(equip);
 }
 
 // ─── Toggle resultado remoto ───────────────────────────────────────────────
@@ -1543,6 +1648,7 @@ function novoAte(){
 // ===== CHECKLIST =====
 var STATE={}, OBS={}, QTY={}, FOTOS={};
 var secIdx=0, equipSel=null, SECTIONS=null;
+var _levantamentoCtx=null; // {osKey,tec} quando o checklist foi aberto a partir do Atendimento
 function ik(sid,cod,i){return `${sid}_${cod}_${i}`;}
 
 function selEquip(nome){
@@ -1554,7 +1660,7 @@ function selEquip(nome){
   equipSel=nome;
   document.getElementById('chk-eq').style.display='none';
   document.getElementById('chk-main').style.display='block';
-  document.getElementById('chk-tit').textContent=nome+' — Checklist';
+  document.getElementById('chk-tit').textContent=nome+' — Checklist'+(_levantamentoCtx?' · '+_levantamentoCtx.osKey:'');
   secIdx=0; buildNav(); renderSec();
 }
 
@@ -1564,6 +1670,10 @@ function voltarEq(){
   Object.keys(OBS).forEach(k=>delete OBS[k]);
   Object.keys(QTY).forEach(k=>delete QTY[k]);
   limparBusca();
+  _levantamentoCtx=null;
+  document.getElementById('chk-lev-banner').style.display='none';
+  const inp=document.getElementById('chk-os-key');
+  inp.readOnly=false; inp.style.background='#fafafa';
   document.getElementById('chk-main').style.display='none';
   document.getElementById('chk-res').style.display='none';
   document.getElementById('chk-eq').style.display='block';
@@ -1886,19 +1996,42 @@ async function salvarTudoDrive() {
       } catch(je) { console.warn('Transição Jira:', je.message); }
     }
 
+    // Se veio do modo "Levantamento de Peças" do Atendimento: registra o
+    // técnico no comentário do Jira e libera a OS para novos atendimentos
+    let levTec = '';
+    if(_levantamentoCtx && _levantamentoCtx.osKey === osKey2) {
+      levTec = _levantamentoCtx.tec;
+      const okCount = Object.values(STATE).filter(v=>v==='ok').length;
+      try {
+        const resumo = `📋 Levantamento de Peças concluído\n\n`+
+          `Técnico: ${levTec}\n`+
+          `Equipamento: ${equipSel||'—'}\n`+
+          `Itens conformes: ${okCount} | Não conformes: ${ncItems.length}\n`+
+          `Data: ${new Date().toLocaleString('pt-BR')}\n\n`+
+          `Lista de peças e PDF de inspeção salvos no Drive. Card movido para Orçamento e Precificação.`;
+        await jiraFetch(`/rest/api/3/issue/${osKey2}/comment`,{method:'POST',body:JSON.stringify({body:toADF(resumo)})});
+        await jiraFetch(`/rest/api/3/issue/${osKey2}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:null}})});
+      } catch(e) { console.warn('Falhou registrar levantamento no Jira:', e.message); }
+      if(osAtualMap['ate']?.key === osKey2) {
+        osAtualMap['ate']=null; _resetAteState_();
+        document.getElementById('ate-s2').style.display='none';
+        document.getElementById('ate-s1').style.display='block';
+      }
+    }
+
     // Mostrar sucesso e liberar UI
     uload();
     document.getElementById('chk-main').style.display='none';
     document.getElementById('chk-res').style.display='none';
     document.getElementById('chk-eq').style.display='block';
-    
+
     // Mostrar tela de sucesso temporária
     const successDiv = document.createElement('div');
     successDiv.style.cssText = 'position:fixed;inset:0;background:var(--gl);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;padding:20px;text-align:center';
     successDiv.innerHTML = `
       <div style="font-size:60px;margin-bottom:16px">✅</div>
       <div style="font-size:20px;font-weight:700;color:var(--gr);margin-bottom:8px">Salvo com sucesso!</div>
-      <div style="font-size:13px;color:var(--t2);margin-bottom:24px">Lista de peças e PDF de inspeção salvos na pasta <b>${osKey}</b> no Drive.<br>Card do Jira movido para Orçamento.</div>
+      <div style="font-size:13px;color:var(--t2);margin-bottom:24px">Lista de peças e PDF de inspeção salvos na pasta <b>${osKey}</b> no Drive.<br>Card do Jira movido para Orçamento.${levTec?`<br>Levantamento de <b>${levTec}</b> registrado.`:''}</div>
       <button onclick="this.parentElement.remove();voltarEq();" style="background:var(--gr);color:#fff;border:none;padding:14px 28px;border-radius:var(--rs);font-size:15px;font-weight:700;cursor:pointer">Novo Checklist</button>
     `;
     document.body.appendChild(successDiv);
