@@ -380,9 +380,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
             <label>Seu Nome</label>
             <select id="ate-tec-sel" onchange="salvarTecnico(this.value)">
               <option value="">Selecione...</option>
-              <option value="Welington Souza">Welington Souza</option>
-              <option value="Ricardo Miguel">Ricardo Miguel</option>
-              <option value="Andre Henrrique">Andre Henrrique</option>
             </select>
           </div>
         </div>
@@ -492,9 +489,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
             <label>Seu Nome</label>
             <select id="ate-tec-sel-fis" onchange="salvarTecnico(this.value)">
               <option value="">Selecione...</option>
-              <option value="Welington Souza">Welington Souza</option>
-              <option value="Ricardo Miguel">Ricardo Miguel</option>
-              <option value="Andre Henrrique">Andre Henrrique</option>
             </select>
           </div>
         </div>
@@ -529,7 +523,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
             <div class="f">
               <label>Horímetro Final</label>
-              <input type="number" id="ate-fis-horimetro" placeholder="horas">
+              <input type="number" id="ate-fis-horimetro" placeholder="horas" min="0" step="1">
             </div>
             <div class="f">
               <label>Tempo de Execução</label>
@@ -571,9 +565,6 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
             <label>Seu Nome</label>
             <select id="ate-tec-sel-lev" onchange="salvarTecnico(this.value)">
               <option value="">Selecione...</option>
-              <option value="Welington Souza">Welington Souza</option>
-              <option value="Ricardo Miguel">Ricardo Miguel</option>
-              <option value="Andre Henrrique">Andre Henrrique</option>
             </select>
           </div>
         </div>
@@ -944,6 +935,16 @@ async function verificarOSDisponivel(osKey){
   }
 }
 const MAX_UPLOAD_MB = 50;
+
+// Lista única de técnicos — mantenha sincronizada com TECH_EMAILS no Codigo.gs
+const TECNICOS = ['Welington Souza','Ricardo Miguel','Andre Henrrique'];
+document.querySelectorAll('#ate-tec-sel, #ate-tec-sel-fis, #ate-tec-sel-lev').forEach(sel=>{
+  TECNICOS.forEach(nome=>{
+    const opt=document.createElement('option');
+    opt.value=nome; opt.textContent=nome;
+    sel.appendChild(opt);
+  });
+});
 function filtrarArquivosOK(files){
   const ok=[], grandes=[];
   Array.from(files).forEach(f=>(f.size>MAX_UPLOAD_MB*1024*1024?grandes:ok).push(f));
@@ -1034,6 +1035,21 @@ async function salvarTriagem(){
         body: JSON.stringify({ fields: { customfield_10045: pastaOSUrl } })
       });
     } catch(pastaErr) { console.warn('Campo pasta não atualizado:', pastaErr.message); }
+
+    // 3c. Notificação por e-mail (não bloqueia se falhar)
+    try {
+      const emailPayload = {
+        osKey: os.key, titulo: novoTitulo, equip: os.equip, cli: os.cli,
+        resp: resp, email: email, impacto: impactoTexto, desc: desc,
+        pastaUrl: pastaOSUrl, data: new Date().toLocaleString('pt-BR')
+      };
+      const emailResp = await fetch(SCRIPT_URL + '?action=notificarTriagem', {
+        method: 'POST', headers: {'Content-Type': 'text/plain'}, body: JSON.stringify(emailPayload)
+      });
+      const emailData = await emailResp.json();
+      if(emailData.error) throw new Error(emailData.error);
+      console.log('Notificação enviada:', emailData);
+    } catch(emailErr) { console.warn('Notificação por e-mail falhou:', emailErr.message); }
 
     uload();
     document.getElementById('tri-s3-txt').innerHTML =
@@ -1653,7 +1669,7 @@ async function finalizarManutencaoFisica(){
         osKey:os.key,equip:os.equip,tec:tec,tipo:'fisico',
         data:new Date().toLocaleString('pt-BR'),
         relato:relato,
-        horimetro:document.getElementById('ate-fis-horimetro').value||'',
+        horimetro:(parseFloat(document.getElementById('ate-fis-horimetro').value)>=0)?document.getElementById('ate-fis-horimetro').value:'',
         tempoExecucao:document.getElementById('ate-fis-tempo').value||'',
         pecas:_kitPecas
       },
