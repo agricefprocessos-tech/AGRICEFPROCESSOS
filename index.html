@@ -185,6 +185,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   <div class="tab on" onclick="swTab('tri',this)">📋 Triagem</div>
   <div class="tab" onclick="swTab('ate',this)">⚡ Atendimento</div>
   <div class="tab" onclick="swTab('chk',this)">✓ Checklist</div>
+  <div class="tab" onclick="swTab('desp',this)">💰 Despesas</div>
 </div>
 
 <!-- ========== ABA TRIAGEM ========== -->
@@ -680,6 +681,89 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
   </div>
 </div>
 
+<!-- ========== ABA DESPESAS ========== -->
+<div class="pg" id="pg-desp">
+  <div id="desp-os-box">
+    <div class="sec-t">Serviços e Despesas da OS</div>
+    <div style="padding:0 12px 8px">
+      <div class="f">
+        <label style="font-size:11px;font-weight:700;color:var(--t2);text-transform:uppercase;letter-spacing:.4px">Número da OS</label>
+        <input type="text" id="desp-os-key" placeholder="Ex: OS-3 ou 3"
+          style="border:1.5px solid var(--bd);border-radius:var(--rs);padding:9px 11px;font-size:14px;width:100%;background:#fafafa"
+          oninput="this.value=this.value.toUpperCase().trim();if(this.value&&!this.value.startsWith('OS-')&&/^\d+$/.test(this.value))this.value='OS-'+this.value">
+      </div>
+      <button class="btn btn-gr" style="margin-top:8px" onclick="carregarDespesas()">Carregar →</button>
+    </div>
+    <div class="ib">Lista compartilhada — técnico e Fabi veem e adicionam os mesmos itens, de qualquer lugar.</div>
+  </div>
+
+  <div id="desp-main" style="display:none">
+    <div class="chk-hdr">
+      <div>
+        <div class="chk-hdr-t">Serviços e Despesas</div>
+        <div class="ptxt" id="desp-sub"></div>
+      </div>
+      <button class="chk-back" onclick="voltarDesp()">↩ Trocar</button>
+    </div>
+
+    <div class="sec-t">Itens Lançados</div>
+    <div id="desp-list"></div>
+    <div class="ib" id="desp-vazio" style="display:none">Nenhum item lançado ainda para esta OS.</div>
+
+    <div class="stbox" style="margin:10px 12px">
+      <div class="strow">
+        <div class="stcell"><div class="stnum" id="desp-total-rs" style="color:var(--gr)">R$ 0,00</div><div class="stlbl">Total em despesas</div></div>
+        <div class="stcell"><div class="stnum" id="desp-total-km" style="color:var(--bl)">0</div><div class="stlbl">Km rodados</div></div>
+      </div>
+    </div>
+
+    <div class="sec-t">Adicionar Item</div>
+    <div class="card">
+      <div class="cb">
+        <div class="f req">
+          <label>Categoria</label>
+          <select id="desp-categoria" onchange="toggleCampoDespesa()">
+            <option value="">Selecione...</option>
+            <option value="Serviço">🔧 Serviço realizado</option>
+            <option value="Hotel">🏨 Hotel</option>
+            <option value="Alimentação">🍽️ Alimentação</option>
+            <option value="Passagem">✈️ Passagem</option>
+            <option value="Deslocamento">🚗 Deslocamento (outro)</option>
+            <option value="Km rodado">📍 Km rodado</option>
+          </select>
+        </div>
+        <div class="f req">
+          <label>Descrição</label>
+          <input type="text" id="desp-descricao" placeholder="Ex: Troca de rolamento / Hotel Ibis / Uber aeroporto">
+        </div>
+        <div class="f req" id="desp-f-valor">
+          <label>Valor (R$)</label>
+          <input type="number" id="desp-valor" min="0" step="0.01" placeholder="0,00">
+        </div>
+        <div class="f req" id="desp-f-km" style="display:none">
+          <label>Quilometragem (km)</label>
+          <input type="number" id="desp-km" min="0" step="1" placeholder="0">
+        </div>
+        <div class="f req">
+          <label>Quem lançou</label>
+          <select id="desp-quem"><option value="">Selecione...</option></select>
+        </div>
+        <div class="f" id="desp-f-comprovante">
+          <label>Comprovante (opcional)</label>
+          <input type="file" id="desp-comprovante-input" accept="image/*" capture="environment">
+        </div>
+      </div>
+    </div>
+    <div class="bw">
+      <button class="btn btn-bl" onclick="adicionarItemDespesa()">＋ Adicionar à Lista</button>
+    </div>
+
+    <div class="bw">
+      <button class="btn btn-gr" onclick="salvarDespesasJira()">☁️ Salvar no Drive e Jira</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 
@@ -739,7 +823,7 @@ function swTab(id, el){
   document.querySelectorAll('.pg').forEach(p=>p.classList.remove('on'));
   el.classList.add('on');
   document.getElementById('pg-'+id).classList.add('on');
-  const labels = {tri:'Questionário de triagem',ate:'Resultado do atendimento',chk:'Checklist de verificação'};
+  const labels = {tri:'Questionário de triagem',ate:'Resultado do atendimento',chk:'Checklist de verificação',desp:'Serviços e despesas'};
   document.getElementById('hdr-s').textContent = labels[id]||'';
 }
 
@@ -2202,6 +2286,225 @@ async function salvarListaDrive(wb, osKey, nomeArq) {
     toast('✅ Lista salva no Drive!', 'ok', 4000);
   } catch(e) {
     toast('Erro ao salvar no Drive: ' + e.message, 'er', 5000);
+  }
+}
+
+// ===== SERVIÇOS E DESPESAS =====
+const RESPONSAVEIS_DESPESA = [...TECNICOS, 'Fabiana'];
+document.querySelectorAll('#desp-quem').forEach(sel=>{
+  RESPONSAVEIS_DESPESA.forEach(nome=>{
+    const opt=document.createElement('option');
+    opt.value=nome; opt.textContent=nome;
+    sel.appendChild(opt);
+  });
+});
+
+var _despOsKey=null, _despItens=[];
+
+async function carregarDespesas(){
+  const osKey=document.getElementById('desp-os-key').value.trim();
+  if(!osKey){toast('Informe o número da OS','er');return;}
+  load('Verificando OS...');
+  let osData;
+  try{
+    const r=await jiraFetch(`/rest/api/3/issue/${osKey}`);
+    const d=await r.json();
+    osData={key:d.key,title:d.fields.summary};
+  }catch(e){
+    uload();
+    toast('OS '+osKey+' não encontrada no Jira. Confira o número.','er',6000);
+    return;
+  }
+  load('Carregando itens já lançados...');
+  _despOsKey=osData.key;
+  _despItens=await buscarDespesasExistentes(osData.key);
+  uload();
+  document.getElementById('desp-os-box').style.display='none';
+  document.getElementById('desp-main').style.display='block';
+  document.getElementById('desp-sub').textContent=osData.key+' — '+osData.title;
+  renderDespesas();
+}
+
+async function buscarDespesasExistentes(osKey){
+  try{
+    const r=await jiraFetch(`/rest/api/3/issue/${osKey}/comment?maxResults=50`);
+    const d=await r.json();
+    const comments=(d.comments||[]).slice().reverse();
+    for(const c of comments){
+      const bodyText=_extrairTextoADF_(c.body||{});
+      const match=bodyText.match(/\[DESPESAS_SERVICOS\]([\s\S]*?)\[\/DESPESAS_SERVICOS\]/);
+      if(match){
+        try{ return JSON.parse(decodeURIComponent(match[1])).map(it=>({...it,novo:false})); }
+        catch(e){}
+      }
+    }
+  }catch(e){ console.warn('Erro ao buscar despesas existentes:',e); }
+  return [];
+}
+
+function voltarDesp(){
+  _despOsKey=null; _despItens=[];
+  document.getElementById('desp-os-key').value='';
+  document.getElementById('desp-main').style.display='none';
+  document.getElementById('desp-os-box').style.display='block';
+}
+
+function toggleCampoDespesa(){
+  const cat=document.getElementById('desp-categoria').value;
+  const ehKm=cat==='Km rodado';
+  document.getElementById('desp-f-valor').style.display=ehKm?'none':'block';
+  document.getElementById('desp-f-km').style.display=ehKm?'block':'none';
+  const ehComprovavel=['Hotel','Alimentação','Passagem'].includes(cat);
+  document.getElementById('desp-f-comprovante').style.display=ehComprovavel?'block':'none';
+}
+
+function adicionarItemDespesa(){
+  const categoria=document.getElementById('desp-categoria').value;
+  const descricao=document.getElementById('desp-descricao').value.trim();
+  const quem=document.getElementById('desp-quem').value;
+  if(!categoria){toast('Selecione a categoria','er');return;}
+  if(!descricao){toast('Descreva o item','er');return;}
+  if(!quem){toast('Selecione quem lançou','er');return;}
+  const ehKm=categoria==='Km rodado';
+  let valor=0, km=0;
+  if(ehKm){
+    km=parseFloat(document.getElementById('desp-km').value);
+    if(!Number.isFinite(km)||km<=0){toast('Informe a quilometragem','er');return;}
+  }else{
+    valor=parseFloat(document.getElementById('desp-valor').value);
+    if(!Number.isFinite(valor)||valor<=0){toast('Informe o valor','er');return;}
+  }
+  const fileInput=document.getElementById('desp-comprovante-input');
+  const comprovanteFile=(fileInput.files&&fileInput.files[0])?fileInput.files[0]:null;
+
+  _despItens.push({
+    id:'d'+Date.now()+Math.random().toString(36).slice(2,7),
+    categoria, descricao, valor:ehKm?0:valor, km:ehKm?km:0,
+    quemLancou:quem, data:new Date().toLocaleString('pt-BR'),
+    novo:true, _comprovanteFile:comprovanteFile,
+    comprovanteNome:comprovanteFile?comprovanteFile.name:''
+  });
+
+  document.getElementById('desp-categoria').value='';
+  document.getElementById('desp-descricao').value='';
+  document.getElementById('desp-valor').value='';
+  document.getElementById('desp-km').value='';
+  fileInput.value='';
+  toggleCampoDespesa();
+  renderDespesas();
+  toast('Item adicionado à lista','ok',2000);
+}
+
+function removerItemDespesa(id){
+  const item=_despItens.find(i=>i.id===id);
+  if(!item||!item.novo) return;
+  _despItens=_despItens.filter(i=>i.id!==id);
+  renderDespesas();
+}
+
+function renderDespesas(){
+  const list=document.getElementById('desp-list');
+  const vazio=document.getElementById('desp-vazio');
+  list.innerHTML='';
+  vazio.style.display=_despItens.length===0?'block':'none';
+  let totalRS=0, totalKM=0;
+  const icones={'Serviço':'🔧','Hotel':'🏨','Alimentação':'🍽️','Passagem':'✈️','Deslocamento':'🚗','Km rodado':'📍'};
+  _despItens.forEach(it=>{
+    totalRS+=(it.valor||0); totalKM+=(it.km||0);
+    const valorTxt=it.categoria==='Km rodado' ? `${esc(it.km)} km` : `R$ ${Number(it.valor||0).toFixed(2)}`;
+    const div=document.createElement('div');
+    div.className='kit-item';
+    div.innerHTML=`
+      <div class="kit-item-hdr">
+        <span class="kit-item-cod">${esc(icones[it.categoria]||'📄')} ${esc(it.categoria)}</span>
+        <span class="kit-item-nm">${esc(it.descricao)}</span>
+        <span class="kit-item-qty">${valorTxt}</span>
+      </div>
+      <div style="padding:0 12px 10px;font-size:11px;color:var(--t2);display:flex;justify-content:space-between;align-items:center;gap:8px">
+        <span>Lançado por ${esc(it.quemLancou)} · ${esc(it.data)}${it.comprovanteNome?' · 📎 '+esc(it.comprovanteNome):''}</span>
+        ${it.novo?`<button onclick="removerItemDespesa('${it.id}')" style="background:none;border:none;color:var(--rd);font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap">Remover</button>`:''}
+      </div>`;
+    list.appendChild(div);
+  });
+  document.getElementById('desp-total-rs').textContent='R$ '+totalRS.toFixed(2);
+  document.getElementById('desp-total-km').textContent=totalKM.toFixed(0);
+}
+
+function gerarWBDespesas(itens){
+  const wb=XLSX.utils.book_new();
+  const ws={};
+  function cel(v,bold,bg){return {v,t:typeof v==='number'?'n':'s',s:{font:{name:'Arial',sz:11,bold:!!bold,color:{rgb:'FF1F1F1F'}},fill:bg?{patternType:'solid',fgColor:{rgb:bg}}:{patternType:'none'},alignment:{horizontal:'left',vertical:'center',wrapText:true},border:{top:{style:'thin',color:{rgb:'FFD1D1D1'}},bottom:{style:'thin',color:{rgb:'FFD1D1D1'}},left:{style:'thin',color:{rgb:'FFD1D1D1'}},right:{style:'thin',color:{rgb:'FFD1D1D1'}}}}}; }
+  const cols=['Categoria','Descrição','Valor (R$)','Km','Lançado por','Data'];
+  cols.forEach((c,i)=>{ws['ABCDEF'[i]+'1']=cel(c,true,'FFD6E4BC');});
+  itens.forEach((it,i)=>{
+    const r=2+i, bg=i%2===0?'FFFFFFFF':'FFF5F5F5';
+    ws['A'+r]=cel(it.categoria,false,bg); ws['B'+r]=cel(it.descricao,false,bg);
+    ws['C'+r]=cel(it.valor||0,false,bg); ws['D'+r]=cel(it.km||0,false,bg);
+    ws['E'+r]=cel(it.quemLancou,false,bg); ws['F'+r]=cel(it.data,false,bg);
+  });
+  const lr=Math.max(2,1+itens.length);
+  ws['!ref']=`A1:F${lr}`;
+  ws['!cols']=[{wch:16},{wch:40},{wch:13},{wch:10},{wch:16},{wch:20}];
+  XLSX.utils.book_append_sheet(wb,ws,'despesas e servicos');
+  return wb;
+}
+
+async function salvarDespesasJira(){
+  const novos=_despItens.filter(i=>i.novo);
+  if(novos.length===0){toast('Nenhum item novo para salvar','er');return;}
+  load('Salvando despesas...');
+  try{
+    const rp=await fetch(`${SCRIPT_URL}?action=createFolder&nome=${encodeURIComponent(_despOsKey)}&pastaRaizId=1zOu6023SHjNChj2P0HxAVlrBvZWUZ5v0`);
+    const dp=await rp.json();
+    if(dp.error) throw new Error('Erro ao criar pasta: '+dp.error);
+    const pastaId=dp.id;
+
+    let pastaComprovantesId=null;
+    for(const item of novos){
+      if(!item._comprovanteFile) continue;
+      load('Enviando comprovante: '+item.comprovanteNome+'...');
+      if(!pastaComprovantesId) pastaComprovantesId=await criarSubpasta_(pastaId,'Comprovantes');
+      const base64=await new Promise((res,rej)=>{
+        const reader=new FileReader();
+        reader.onload=()=>res(reader.result.split(',')[1]);
+        reader.onerror=rej;
+        reader.readAsDataURL(item._comprovanteFile);
+      });
+      const r=await fetch(SCRIPT_URL,{
+        method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+        body:'action=uploadFile&pastaId='+encodeURIComponent(pastaComprovantesId)+'&nomeArquivo='+encodeURIComponent(item.comprovanteNome)+'&mimeType='+encodeURIComponent(item._comprovanteFile.type)+'&base64='+encodeURIComponent(base64)
+      });
+      const d=await r.json();
+      if(!d.error) item.comprovanteUrl=d.url;
+    }
+
+    load('Gerando planilha...');
+    const wb=gerarWBDespesas(_despItens);
+    const nomeArq=`despesas_servicos_${_despOsKey}_${new Date().toISOString().slice(0,10)}.xlsx`;
+    const wbout=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
+    await fetch(SCRIPT_URL,{
+      method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
+      body:'action=uploadFile&pastaId='+encodeURIComponent(pastaId)+'&nomeArquivo='+encodeURIComponent(nomeArq)+'&mimeType=application%2Fvnd.openxmlformats-officedocument.spreadsheetml.sheet&base64='+encodeURIComponent(wbout)
+    });
+
+    load('Atualizando Jira...');
+    _despItens.forEach(i=>{i.novo=false;});
+    const itensParaSalvar=_despItens.map(({_comprovanteFile,...resto})=>resto);
+    const tag='\n[DESPESAS_SERVICOS]'+encodeURIComponent(JSON.stringify(itensParaSalvar))+'[/DESPESAS_SERVICOS]';
+    const resumoNovos=novos.map((it,i)=>{
+      const v=it.categoria==='Km rodado' ? `${it.km} km` : `R$ ${Number(it.valor).toFixed(2)}`;
+      return `${i+1}. [${it.categoria}] ${it.descricao} — ${v} (${it.quemLancou})`;
+    }).join('\n');
+    const comentario={body:toADF(`💰 Serviços/Despesas lançados\n\n${resumoNovos}\n\nData: ${new Date().toLocaleString('pt-BR')}${tag}`)};
+    await jiraFetch(`/rest/api/3/issue/${_despOsKey}/comment`,{method:'POST',body:JSON.stringify(comentario)});
+
+    uload();
+    toast('✅ Despesas salvas no Drive e no Jira!','ok',4000);
+    renderDespesas();
+  }catch(e){
+    uload();
+    toast('Erro: '+e.message,'er',6000);
+    console.error(e);
   }
 }
 
