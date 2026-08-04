@@ -762,6 +762,8 @@ function selRadio(name, val, elId){
 var osAtualMap = {};
 var _bt = {};
 
+var _osCache = {};
+
 function buscarOS(ctx, v){
   clearTimeout(_bt[ctx]);
   const resEl = document.getElementById(ctx+'-os-res');
@@ -778,25 +780,31 @@ function buscarOS(ctx, v){
       const sta=d.fields.status?.name||'—';
       const tec=d.fields.customfield_10048||'';
       const osData = {key:d.key,title:d.fields.summary,equip,cli,sta,tec};
-      resEl.innerHTML=`<div class="os-res" onclick='selOS("${ctx}",${JSON.stringify(JSON.stringify(osData))})'>
-        <div class="os-key">${d.key}</div>
-        <div class="os-tit">${d.fields.summary}</div>
-        <div class="os-inf">${cli} · ${equip}</div>
-        <div class="os-sta">${sta}</div>
+      _osCache[ctx] = osData;
+      resEl.innerHTML=`<div class="os-res" onclick="selOSCache('${ctx}')">
+        <div class="os-key">${esc(d.key)}</div>
+        <div class="os-tit">${esc(d.fields.summary)}</div>
+        <div class="os-inf">${esc(cli)} · ${esc(equip)}</div>
+        <div class="os-sta">${esc(sta)}</div>
       </div>`;
     }catch(e){resEl.innerHTML='<div style="font-size:12px;color:var(--rd);padding:6px 0">OS não encontrada. Verifique o número.</div>';}
   },600);
 }
 
-function selOS(ctx, osJson){
-  const os = JSON.parse(osJson);
+function selOSCache(ctx){
+  const os = _osCache[ctx];
+  if(!os) return;
+  selOS(ctx, os);
+}
+
+function selOS(ctx, os){
   osAtualMap[ctx] = os;
   document.getElementById(ctx+'-os-res').innerHTML='';
   document.getElementById(ctx+'-os-inp').value='';
   document.getElementById(ctx+'-os-box').innerHTML=`
-    <div class="os-box-key">${os.key}</div>
-    <div class="os-box-tit">${os.title}</div>
-    <div class="os-box-inf">${os.cli} · ${os.equip} · <b>${os.sta}</b></div>`;
+    <div class="os-box-key">${esc(os.key)}</div>
+    <div class="os-box-tit">${esc(os.title)}</div>
+    <div class="os-box-inf">${esc(os.cli)} · ${esc(os.equip)} · <b>${esc(os.sta)}</b></div>`;
   document.getElementById(ctx+'-s1').style.display='none';
   document.getElementById(ctx+'-s2').style.display='block';
   if(ctx==='ate') mostrarFaseAtendimento(os);
@@ -844,6 +852,8 @@ async function criarSubpasta_(pastaRaizId, nome) {
 async function adicionarMidias(files) {
   if(!osAtualMap['tri']) { toast('Selecione uma OS primeiro','er'); return; }
   if(!files || files.length === 0) return;
+  files = filtrarArquivosOK(files);
+  if(files.length === 0) return;
 
   const os = osAtualMap['tri'];
   const filesList = document.getElementById('tri-files-list');
@@ -914,6 +924,31 @@ async function adicionarMidias(files) {
   }
 
   statusEl.innerHTML = `<div class="ib" style="margin:0;background:var(--gl);border-color:var(--gr);color:var(--gr)">✅ ${arquivosUpload.length} arquivo(s) enviado(s) para o Drive!</div>`;
+}
+
+// ===== SEGURANÇA / VALIDAÇÃO =====
+function esc(s){
+  return String(s??'').replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function qtyOf(k){
+  const n=parseInt(QTY[k]);
+  return (Number.isFinite(n)&&n>0) ? n : 1;
+}
+async function verificarOSDisponivel(osKey){
+  try{
+    const r=await jiraFetch(`/rest/api/3/issue/${osKey}`);
+    const d=await r.json();
+    return {livre: !d.fields.customfield_10048, tecAtual: d.fields.customfield_10048||''};
+  }catch(e){
+    return {livre:true, tecAtual:''}; // falha de rede não deve travar o técnico
+  }
+}
+const MAX_UPLOAD_MB = 50;
+function filtrarArquivosOK(files){
+  const ok=[], grandes=[];
+  Array.from(files).forEach(f=>(f.size>MAX_UPLOAD_MB*1024*1024?grandes:ok).push(f));
+  if(grandes.length) toast(`${grandes.length} arquivo(s) acima de ${MAX_UPLOAD_MB}MB foram ignorados: ${grandes.map(f=>f.name).join(', ')}`,'al',6000);
+  return ok;
 }
 
 // ===== ABA TRIAGEM =====
@@ -1002,11 +1037,11 @@ async function salvarTriagem(){
 
     uload();
     document.getElementById('tri-s3-txt').innerHTML =
-      'Triagem da OS <b>' + os.key + '</b> registrada com sucesso!<br><br>' +
-      'Responsável: <b>' + resp + '</b><br>' +
-      'Impacto: <b>' + impactoTexto + '</b><br>' +
+      'Triagem da OS <b>' + esc(os.key) + '</b> registrada com sucesso!<br><br>' +
+      'Responsável: <b>' + esc(resp) + '</b><br>' +
+      'Impacto: <b>' + esc(impactoTexto) + '</b><br>' +
       'Arquivos enviados: <b>' + arquivosUpload.length + '</b><br><br>' +
-      '📧 Notificação enviada para <b>' + email + '</b><br><br>' +
+      '📧 Notificação enviada para <b>' + esc(email) + '</b><br><br>' +
       '<a href="' + pastaOSUrl + '" target="_blank" style="color:var(--gr);font-weight:600">📁 Abrir pasta no Drive</a>';
     document.getElementById('tri-s2').style.display='none';
     document.getElementById('tri-s3').style.display='block';
@@ -1084,7 +1119,7 @@ function mostrarFaseAtendimento(os){
       document.getElementById('ate-tec-badge').textContent='📞 Suporte remoto em andamento por: '+(tecOS||tecLocal);
       document.getElementById('ate-fase-rem-fin').style.display='block';
     } else {
-      document.getElementById('ate-bloq-txt').innerHTML='Esta OS está em suporte remoto com <b>'+tecOS+'</b>.<br>Apenas esse técnico pode finalizá-la.';
+      document.getElementById('ate-bloq-txt').innerHTML='Esta OS está em suporte remoto com <b>'+esc(tecOS)+'</b>.<br>Apenas esse técnico pode finalizá-la.';
       document.getElementById('ate-bloq').style.display='block';
     }
   } else if(sta.includes('MANUTENÇÃO')||sta.includes('MANUTENCAO')||sta.includes('MANUTEN')){
@@ -1094,7 +1129,7 @@ function mostrarFaseAtendimento(os){
       carregarKitPecas(os.key);
       document.getElementById('ate-fase-fis-fin').style.display='block';
     } else {
-      document.getElementById('ate-bloq-txt').innerHTML='Esta OS está em manutenção com <b>'+tecOS+'</b>.<br>Apenas esse técnico pode finalizá-la.';
+      document.getElementById('ate-bloq-txt').innerHTML='Esta OS está em manutenção com <b>'+esc(tecOS)+'</b>.<br>Apenas esse técnico pode finalizá-la.';
       document.getElementById('ate-bloq').style.display='block';
     }
   } else if(sta.includes('AGUARDANDO PCP')||sta.includes('AGENDAMENTO')){
@@ -1109,7 +1144,7 @@ function mostrarFaseAtendimento(os){
       document.getElementById('ate-tec-badge-lev').textContent='📋 Levantamento de peças em andamento por: '+(tecOS||tecLocal);
       document.getElementById('ate-fase-lev-fin').style.display='block';
     } else {
-      document.getElementById('ate-bloq-txt').innerHTML='Esta OS está em levantamento de peças com <b>'+tecOS+'</b>.<br>Apenas esse técnico pode continuá-la.';
+      document.getElementById('ate-bloq-txt').innerHTML='Esta OS está em levantamento de peças com <b>'+esc(tecOS)+'</b>.<br>Apenas esse técnico pode continuá-la.';
       document.getElementById('ate-bloq').style.display='block';
     }
   } else {
@@ -1157,6 +1192,13 @@ async function iniciarSuporteRemoto(){
   if(!os){toast('Selecione uma OS','er');return;}
   const tec=document.getElementById('ate-tec-sel').value;
   if(!tec){toast('Selecione seu nome','er');return;}
+  load('Verificando disponibilidade da OS...');
+  const check=await verificarOSDisponivel(os.key);
+  if(!check.livre){
+    uload();
+    toast(`Esta OS acabou de ser assumida por ${check.tecAtual}. Atualize a busca.`,'er',6000);
+    return;
+  }
   load('Iniciando suporte remoto...');
   try{
     await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:tec}})});
@@ -1187,6 +1229,13 @@ async function iniciarManutencaoFisica(){
   if(!os){toast('Selecione uma OS','er');return;}
   const tec=document.getElementById('ate-tec-sel-fis').value;
   if(!tec){toast('Selecione seu nome','er');return;}
+  load('Verificando disponibilidade da OS...');
+  const check=await verificarOSDisponivel(os.key);
+  if(!check.livre){
+    uload();
+    toast(`Esta OS acabou de ser assumida por ${check.tecAtual}. Atualize a busca.`,'er',6000);
+    return;
+  }
   load('Iniciando manutenção física...');
   try{
     await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:tec}})});
@@ -1224,6 +1273,13 @@ async function iniciarLevantamentoPecas(){
   if(!os){toast('Selecione uma OS','er');return;}
   const tec=document.getElementById('ate-tec-sel-lev').value;
   if(!tec){toast('Selecione seu nome','er');return;}
+  load('Verificando disponibilidade da OS...');
+  const check=await verificarOSDisponivel(os.key);
+  if(!check.livre){
+    uload();
+    toast(`Esta OS acabou de ser assumida por ${check.tecAtual}. Atualize a busca.`,'er',6000);
+    return;
+  }
   load('Iniciando levantamento de peças...');
   try{
     try{
@@ -1350,9 +1406,9 @@ function renderizarKitPecas(){
     item.className='kit-item'; item.id='kit-item-'+i;
     item.innerHTML=`
       <div class="kit-item-hdr">
-        <span class="kit-item-cod">${p.cod||'—'}</span>
-        <span class="kit-item-nm">${p.nome||'—'}</span>
-        <span class="kit-item-qty">Qtd: ${p.qty||1}</span>
+        <span class="kit-item-cod">${esc(p.cod||'—')}</span>
+        <span class="kit-item-nm">${esc(p.nome||'—')}</span>
+        <span class="kit-item-qty">Qtd: ${esc(p.qty||1)}</span>
       </div>
       <div class="kit-opts">
         <div class="kit-opt${p.status==='aplicada'?' sel-ok':''}" onclick="setKitStatus(${i},'aplicada')">✅ Aplicada</div>
@@ -1421,6 +1477,8 @@ function adicionarPecaRemota(){
 async function adicionarMidiasAte(files,ctx){
   if(!osAtualMap['ate']){toast('Selecione uma OS primeiro','er');return;}
   if(!files||files.length===0) return;
+  files = filtrarArquivosOK(files);
+  if(files.length===0) return;
   const os=osAtualMap['ate'];
   const filesList=document.getElementById(ctx==='fis'?'ate-fis-files-list':'ate-files-list');
   const statusEl=document.getElementById(ctx==='fis'?'ate-fis-upload-status':'ate-upload-status');
@@ -1656,11 +1714,24 @@ var secIdx=0, equipSel=null, SECTIONS=null;
 var _levantamentoCtx=null; // {osKey,tec} quando o checklist foi aberto a partir do Atendimento
 function ik(sid,cod,i){return `${sid}_${cod}_${i}`;}
 
-function selEquip(nome){
+async function selEquip(nome){
   const suportados=['Hauler','Sider'];
   if(!suportados.includes(nome)){toast('Checklist de '+nome+' em breve!');return;}
   const osKey = document.getElementById('chk-os-key')?.value?.trim();
   if(!osKey){toast('Informe o número da OS antes de iniciar o checklist','er');document.getElementById('chk-os-key').focus();return;}
+  // Se veio do Atendimento a OS já foi validada; senão confirma que existe no Jira
+  // antes de abrir o checklist, pra não gerar pasta/lista órfã por número digitado errado
+  if(!(_levantamentoCtx && _levantamentoCtx.osKey===osKey)){
+    load('Verificando OS...');
+    try{
+      await jiraFetch(`/rest/api/3/issue/${osKey}`);
+    }catch(e){
+      uload();
+      toast('OS '+osKey+' não encontrada no Jira. Confira o número antes de continuar.','er',6000);
+      return;
+    }
+    uload();
+  }
   SECTIONS = nome==='Sider' ? SECTIONS_SIDER : SECTIONS_HAULER;
   equipSel=nome;
   document.getElementById('chk-eq').style.display='none';
@@ -1763,7 +1834,7 @@ function buscarChk(q){
     });
     html+='</div>';
   });
-  if(!total) html='<div style="text-align:center;padding:30px;color:var(--t2)">Nenhum item encontrado para "<b>'+q+'</b>"</div>';
+  if(!total) html='<div style="text-align:center;padding:30px;color:var(--t2)">Nenhum item encontrado para "<b>'+esc(q)+'</b>"</div>';
   else html=`<div style="font-size:12px;color:var(--t2);padding-bottom:8px">${total} item(ns) em ${html.match(/📂/g).length} seção(ões)</div>`+html;
   res.innerHTML=html;
 }
@@ -1805,7 +1876,7 @@ function renderSec(){
           <label>Qtd:</label>
           <input class="qi" type="number" min="1" value="${QTY[k]||1}" oninput="QTY['${k}']=this.value" id="q-${k}">
         </div>
-        <textarea placeholder="Descreva o problema (opcional)..." oninput="OBS['${k}']=this.value" id="ob-${k}">${OBS[k]||''}</textarea>
+        <textarea placeholder="Descreva o problema (opcional)..." oninput="OBS['${k}']=this.value" id="ob-${k}">${esc(OBS[k]||'')}</textarea>
         <div style="margin-top:6px">
           <label style="font-size:11px;font-weight:700;color:var(--rd)">📷 Foto do problema:</label>
           <input type="file" accept="image/*" capture="environment" 
@@ -1855,12 +1926,12 @@ function mostrarResumo(){
     sec.itens.forEach((it,j)=>{
       const k=ik(sec.id,it.cod,j);
       if(STATE[k]!=='nc')return;
-      const o=OBS[k]||''; const q=QTY[k]||1;
+      const o=OBS[k]||''; const q=qtyOf(k);
       list.innerHTML+=`<div class="nc-item">
-        <div class="nc-sec">${sec.nome.substring(0,45)}</div>
-        <div class="nc-name">${it.item}${it.critico?' ⚠️':''}</div>
-        <div class="nc-cod">Cód: ${it.cod} · Qtd: ${q}</div>
-        ${o?`<div class="nc-obs">${o}</div>`:''}
+        <div class="nc-sec">${esc(sec.nome.substring(0,45))}</div>
+        <div class="nc-name">${esc(it.item)}${it.critico?' ⚠️':''}</div>
+        <div class="nc-cod">Cód: ${esc(it.cod)} · Qtd: ${q}</div>
+        ${o?`<div class="nc-obs">${esc(o)}</div>`:''}
       </div>`;
     });
   });
@@ -1871,7 +1942,7 @@ function exportXLSX(){
   SECTIONS.forEach(sec=>{
     sec.itens.forEach((it,j)=>{
       const k=ik(sec.id,it.cod,j);
-      if(STATE[k]==='nc') ncItems.push({pos:'Ref. '+it.cod,cod:it.cod,desc:it.item+(it.critico?' [CRÍTICO]':''),qtd:parseInt(QTY[k])||1,sec:sec.nome,obs:OBS[k]||''});
+      if(STATE[k]==='nc') ncItems.push({pos:'Ref. '+it.cod,cod:it.cod,desc:it.item+(it.critico?' [CRÍTICO]':''),qtd:qtyOf(k),sec:sec.nome,obs:OBS[k]||''});
     });
   });
   const wb = gerarWB(ncItems);
@@ -1899,7 +1970,7 @@ async function gerarPDFInspecao(osKey) {
           cod: it.cod,
           item: it.item,
           critico: it.critico,
-          qtd: parseInt(QTY[k]) || 1,
+          qtd: qtyOf(k),
           obs: OBS[k] || '',
           foto: FOTOS[k] ? FOTOS[k].base64 : null,
           fotoMime: FOTOS[k] ? FOTOS[k].type : 'image/jpeg',
@@ -1951,7 +2022,7 @@ async function salvarTudoDrive() {
       if(STATE[k] !== 'nc') return;
       ncItems.push({
         secao: sec.nome, cod: it.cod, item: it.item, critico: it.critico,
-        qtd: parseInt(QTY[k])||1, obs: OBS[k]||'',
+        qtd: qtyOf(k), obs: OBS[k]||'',
         foto: FOTOS[k]?FOTOS[k].base64:null,
         fotoMime: FOTOS[k]?FOTOS[k].type:'image/jpeg',
         fotoNome: FOTOS[k]?FOTOS[k].nome:''
@@ -2055,7 +2126,7 @@ function gerarWB(ncItemsOpt) {
     SECTIONS.forEach(sec=>{
       sec.itens.forEach((it,j)=>{
         const k=ik(sec.id,it.cod,j);
-        if(STATE[k]==='nc') ncItems.push({pos:'Ref. '+it.cod,cod:it.cod,desc:it.item+(it.critico?' [CRÍTICO]':''),qtd:parseInt(QTY[k])||1,sec:sec.nome,obs:OBS[k]||''});
+        if(STATE[k]==='nc') ncItems.push({pos:'Ref. '+it.cod,cod:it.cod,desc:it.item+(it.critico?' [CRÍTICO]':''),qtd:qtyOf(k),sec:sec.nome,obs:OBS[k]||''});
       });
     });
   } else {
