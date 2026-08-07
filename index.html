@@ -206,6 +206,21 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
     </div>
     <div class="ib">Digite o número da OS. A triagem pode ser preenchida pela Fabi ou pelo Técnico no primeiro contato com o problema.</div>
+
+    <div class="card" id="tri-nova-os-card">
+      <div class="ch" style="cursor:pointer" onclick="toggleNovaOS()">➕ Abrir Nova OS <span id="tri-nova-os-arrow">▾</span></div>
+      <div class="cb" id="tri-nova-os-body" style="display:none">
+        <div class="f req">
+          <label>Resumo da OS</label>
+          <input type="text" id="tri-novo-resumo" placeholder="Ex: Hauler | Cliente – breve descrição do problema">
+        </div>
+        <div class="f">
+          <label>Nº OS Legado</label>
+          <input type="text" id="tri-novo-legado" placeholder="Número no sistema antigo (opcional)">
+        </div>
+        <button class="btn btn-gr" onclick="criarNovaOS()">Criar OS e continuar →</button>
+      </div>
+    </div>
   </div>
 
   <!-- S2: Questionário de triagem -->
@@ -1186,6 +1201,40 @@ function novaTri(){
   document.getElementById('tri-link-area').style.display='none';
   document.getElementById('tri-s3').style.display='none';
   document.getElementById('tri-s1').style.display='block';
+}
+
+function toggleNovaOS(){
+  const body = document.getElementById('tri-nova-os-body');
+  const arrow = document.getElementById('tri-nova-os-arrow');
+  const showing = body.style.display !== 'none';
+  body.style.display = showing ? 'none' : 'block';
+  arrow.textContent = showing ? '▾' : '▴';
+}
+
+async function criarNovaOS(){
+  const resumo = document.getElementById('tri-novo-resumo').value.trim();
+  const legado = document.getElementById('tri-novo-legado').value.trim();
+  if(!resumo){ toast('Preencha o resumo da OS','er'); return; }
+  if(window._criandoOS) return;
+  window._criandoOS = true;
+  load('Criando OS no Jira...');
+  try{
+    const fields = { project:{key:'OS'}, issuetype:{id:'10011'}, summary: resumo };
+    if(legado) fields.customfield_10253 = legado;
+    const r = await jiraFetch('/rest/api/3/issue', {method:'POST', body: JSON.stringify({fields})});
+    const d = await r.json();
+    uload();
+    toast('OS '+d.key+' criada!','ok',2500);
+    document.getElementById('tri-novo-resumo').value='';
+    document.getElementById('tri-novo-legado').value='';
+    toggleNovaOS();
+    selOS('tri', {key:d.key, title:resumo, equip:'—', cli:'—', sta:'NOVA OS / TRIAGEM', tec:''});
+  }catch(e){
+    uload();
+    toast('Erro ao criar OS: '+e.message,'er',6000);
+  }finally{
+    window._criandoOS = false;
+  }
 }
 
 // ===== ABA ATENDIMENTO =====
