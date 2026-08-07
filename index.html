@@ -211,14 +211,30 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <div class="ch" style="cursor:pointer" onclick="toggleNovaOS()">➕ Abrir Nova OS <span id="tri-nova-os-arrow">▾</span></div>
       <div class="cb" id="tri-nova-os-body" style="display:none">
         <div class="f req">
+          <label>Equipamento</label>
+          <select id="tri-novo-equip">
+            <option value="">Selecione...</option>
+            <option value="Hauler">Hauler</option>
+            <option value="Sider">Sider</option>
+            <option value="Dripper">Dripper</option>
+            <option value="IrrigAI">IrrigAI</option>
+            <option value="Kairos">Kairos</option>
+            <option value="Sider UTV">Sider UTV</option>
+          </select>
+        </div>
+        <div class="f req">
+          <label>Cliente / Usina</label>
+          <input type="text" id="tri-novo-cli" placeholder="Ex: Atvos, Viterra, Basf...">
+        </div>
+        <div class="f req">
           <label>Resumo da OS</label>
-          <input type="text" id="tri-novo-resumo" placeholder="Ex: Hauler | Cliente – breve descrição do problema">
+          <input type="text" id="tri-novo-resumo" placeholder="Breve descrição do problema">
         </div>
         <div class="f">
           <label>Nº OS Legado</label>
           <input type="text" id="tri-novo-legado" placeholder="Número no sistema antigo (opcional)">
         </div>
-        <button class="btn btn-gr" onclick="criarNovaOS()">Criar OS e continuar →</button>
+        <button class="btn btn-gr" id="tri-criar-os-btn" onclick="criarNovaOS()">Criar OS e continuar →</button>
       </div>
     </div>
   </div>
@@ -1036,7 +1052,7 @@ async function verificarOSDisponivel(osKey){
 const MAX_UPLOAD_MB = 50;
 
 // Lista única de técnicos — mantenha sincronizada com TECH_EMAILS no Codigo.gs
-const TECNICOS = ['Wellington Souza','Ricardo Miguel','Andre Henrrique'];
+const TECNICOS = ['Wellington Souza','Ricardo Miguel','Andre Henrrique','Fabiana Gomes','Rafael Rodrigues'];
 document.querySelectorAll('#ate-tec-sel, #ate-tec-sel-fis, #ate-tec-sel-lev').forEach(sel=>{
   TECNICOS.forEach(nome=>{
     const opt=document.createElement('option');
@@ -1212,28 +1228,47 @@ function toggleNovaOS(){
 }
 
 async function criarNovaOS(){
+  const equip = document.getElementById('tri-novo-equip').value;
+  const cli = document.getElementById('tri-novo-cli').value.trim();
   const resumo = document.getElementById('tri-novo-resumo').value.trim();
   const legado = document.getElementById('tri-novo-legado').value.trim();
-  if(!resumo){ toast('Preencha o resumo da OS','er'); return; }
+  if(!equip||!cli||!resumo){ toast('Preencha equipamento, cliente/usina e resumo','er'); return; }
   if(window._criandoOS) return;
   window._criandoOS = true;
+  const btn = document.getElementById('tri-criar-os-btn');
+  btn.disabled = true;
   load('Criando OS no Jira...');
   try{
-    const fields = { project:{key:'OS'}, issuetype:{id:'10011'}, summary: resumo };
+    const titulo = `${equip} | ${cli} – ${resumo}`;
+    const fields = {
+      project:{key:'OS'}, issuetype:{id:'10011'}, summary: titulo,
+      customfield_10050:{value:equip}, customfield_10041: cli
+    };
     if(legado) fields.customfield_10253 = legado;
     const r = await jiraFetch('/rest/api/3/issue', {method:'POST', body: JSON.stringify({fields})});
     const d = await r.json();
+    // Confere o resumo salvo e corrige caso tenha vindo duplicado/diferente do esperado
+    try{
+      const chk = await jiraFetch('/rest/api/3/issue/'+d.key+'?fields=summary');
+      const dChk = await chk.json();
+      if(dChk.fields?.summary !== titulo){
+        await jiraFetch('/rest/api/3/issue/'+d.key, {method:'PUT', body: JSON.stringify({fields:{summary:titulo}})});
+      }
+    }catch(chkErr){ console.warn('Verificação de resumo falhou:', chkErr.message); }
     uload();
     toast('OS '+d.key+' criada!','ok',2500);
+    document.getElementById('tri-novo-equip').value='';
+    document.getElementById('tri-novo-cli').value='';
     document.getElementById('tri-novo-resumo').value='';
     document.getElementById('tri-novo-legado').value='';
     toggleNovaOS();
-    selOS('tri', {key:d.key, title:resumo, equip:'—', cli:'—', sta:'NOVA OS / TRIAGEM', tec:''});
+    selOS('tri', {key:d.key, title:titulo, equip, cli, sta:'NOVA OS / TRIAGEM', tec:''});
   }catch(e){
     uload();
     toast('Erro ao criar OS: '+e.message,'er',6000);
   }finally{
     window._criandoOS = false;
+    btn.disabled = false;
   }
 }
 
