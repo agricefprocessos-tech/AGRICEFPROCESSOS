@@ -2175,20 +2175,15 @@ function mostrarResumo(){
   });
 }
 
-function exportXLSX(){
-  const ncItems=[];
-  SECTIONS.forEach(sec=>{
-    sec.itens.forEach((it,j)=>{
-      const k=ik(sec.id,it.cod,j);
-      if(STATE[k]==='nc') ncItems.push({pos:'Ref. '+it.cod,cod:it.cod,desc:it.item+(it.critico?' [CRÍTICO]':''),qtd:qtyOf(k),sec:sec.nome,obs:OBS[k]||''});
-    });
-  });
-  const wb = gerarWB(ncItems);
-  const nomeArq = `lista_pecas_${equipSel}_${new Date().toISOString().slice(0,10)}.xlsx`;
-  XLSX.writeFile(wb, nomeArq);
-  
-  // Salvar no Drive se tiver OS key
+async function exportXLSX(){
   const osKey = document.getElementById('chk-os-key')?.value?.trim();
+  const pecasItems = _pecasDoChecklist_();
+  const despesasItens = osKey ? await buscarDespesasExistentes(osKey) : [];
+  const wb = gerarWBCombinado(pecasItems, despesasItens);
+  const nomeArq = `lista_pecas_despesas_${osKey||equipSel}.xlsx`;
+  XLSX.writeFile(wb, nomeArq);
+
+  // Salvar no Drive se tiver OS key
   if(osKey) {
     salvarListaDrive(wb, osKey, nomeArq);
     gerarPDFInspecao(osKey);
@@ -2276,15 +2271,24 @@ async function salvarTudoDrive() {
     if(dp.error) throw new Error(dp.error);
     const pastaId = dp.id;
 
-    // 1. Salvar lista de peças xlsx
-    const wb = gerarWB(ncItems);
-    const nomeArq = `lista_pecas_${osKey}_${new Date().toISOString().slice(0,10)}.xlsx`;
+    // 1. Salvar lista de peças + despesas (busca despesas já lançadas pra não perder o que a Fabi já colocou)
+    const despesasExistentes = await buscarDespesasExistentes(osKey);
+    const wb = gerarWBCombinado(ncItems, despesasExistentes);
+    const nomeArq = `lista_pecas_despesas_${osKey}.xlsx`;
     const wbout = XLSX.write(wb, {bookType:'xlsx', type:'base64'});
     const r1 = await fetch(SCRIPT_URL, {
       method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
-      body:'action=uploadFile&pastaId='+encodeURIComponent(pastaId)+'&nomeArquivo='+encodeURIComponent(nomeArq)+'&mimeType=application%2Fvnd.openxmlformats-officedocument.spreadsheetml.sheet&base64='+encodeURIComponent(wbout)
+      body:'action=uploadFile&pastaId='+encodeURIComponent(pastaId)+'&nomeArquivo='+encodeURIComponent(nomeArq)+'&mimeType=application%2Fvnd.openxmlformats-officedocument.spreadsheetml.sheet&substituir=1&base64='+encodeURIComponent(wbout)
     });
     await r1.json();
+
+    // 1b. Guarda a lista de peças num comentário do Jira, pra Despesas conseguir
+    // recuperar depois e completar o mesmo arquivo (igual já fazemos com Kit de Peças)
+    try {
+      const pecasParaSalvar = ncItems.map(({foto,...resto})=>resto);
+      const tagPecas = '\n[LISTA_PECAS]'+encodeURIComponent(JSON.stringify(pecasParaSalvar))+'[/LISTA_PECAS]';
+      await jiraFetch(`/rest/api/3/issue/${osKey}/comment`,{method:'POST',body:JSON.stringify({body:toADF('🛠️ Lista de peças atualizada'+tagPecas)})});
+    } catch(pe) { console.warn('Falhou registrar lista de peças no Jira:', pe.message); }
 
     // 2. Gerar PDF de inspeção com fotos
     if(ncItems.length > 0) {
@@ -2357,49 +2361,83 @@ async function salvarTudoDrive() {
   }
 }
 
-function gerarWB(ncItemsOpt) {
-  // Generate workbook - same as exportXLSX but returns wb instead of saving
-  const ncItems = ncItemsOpt || [];
-  if(!ncItemsOpt) {
-    SECTIONS.forEach(sec=>{
-      sec.itens.forEach((it,j)=>{
-        const k=ik(sec.id,it.cod,j);
-        if(STATE[k]==='nc') ncItems.push({pos:'Ref. '+it.cod,cod:it.cod,desc:it.item+(it.critico?' [CRÍTICO]':''),qtd:qtyOf(k),sec:sec.nome,obs:OBS[k]||''});
-      });
+function _pecasDoChecklist_() {
+  const ncItems=[];
+  SECTIONS.forEach(sec=>{
+    sec.itens.forEach((it,j)=>{
+      const k=ik(sec.id,it.cod,j);
+      if(STATE[k]==='nc') ncItems.push({pos:'Ref. '+it.cod,cod:it.cod,desc:it.item+(it.critico?' [CRÍTICO]':''),qtd:qtyOf(k),sec:sec.nome,obs:OBS[k]||''});
     });
-  } else {
-    ncItems.forEach(it=>{ it.pos='Ref. '+it.cod; it.desc=it.item+(it.critico?' [CRÍTICO]':''); });
-  }
+  });
+  return ncItems;
+}
+
+// Gera UM workbook com Cabeçalho + Peças + Despesas — usado tanto ao
+// finalizar o Checklist quanto ao salvar Despesas, sempre com os dois lados
+// (o lado que não está sendo salvo agora vem do que já está no Jira).
+function gerarWBCombinado(pecasItemsOpt, despesasItensOpt) {
+  const pecasItems = pecasItemsOpt || _pecasDoChecklist_();
+  const despesasItens = despesasItensOpt || [];
   const wb=XLSX.utils.book_new();
   const ws={};
   const merges=[];
   function cel(v,bold,sz,bg,align,wrap,color){return {v,t:typeof v==='number'?'n':'s',s:{font:{name:'Arial',sz:sz||14,bold:!!bold,color:{rgb:color||'FF1F1F1F'}},fill:bg?{patternType:'solid',fgColor:{rgb:bg}}:{patternType:'none'},alignment:{horizontal:align||'left',vertical:'center',wrapText:!!wrap},border:{top:{style:'thin',color:{rgb:'FFD1D1D1'}},bottom:{style:'thin',color:{rgb:'FFD1D1D1'}},left:{style:'thin',color:{rgb:'FFD1D1D1'}},right:{style:'thin',color:{rgb:'FFD1D1D1'}}}}}; }
   const GRN='FF1A7A4A',AMB='FFD4860A',BLU='FF1F4E79';
-  ws['A1']=cel('Nº da OS:',true,18);ws['C1']=cel(document.getElementById('chk-os-key')?.value||'',false,18);ws['F1']=cel('Data:',true,18);ws['I1']=cel(new Date().toLocaleDateString('pt-BR'),false,18);
+  const toRC=ref=>{const col=ref.match(/[A-Z]+/)[0];const row=parseInt(ref.match(/\d+/)[0])-1;const c=col.split('').reduce((a,ch)=>a*26+(ch.charCodeAt(0)-64),0)-1;return{r:row,c}};
+  function merge(s,e){merges.push({s:toRC(s),e:toRC(e)});}
+
+  // ── Cabeçalho ──
+  ws['A1']=cel('Nº da OS:',true,18);ws['C1']=cel(document.getElementById('chk-os-key')?.value||_despOsKey||'',false,18);ws['F1']=cel('Data:',true,18);ws['I1']=cel(new Date().toLocaleDateString('pt-BR'),false,18);
   ws['A2']=cel('Equipamento:',true,18);ws['C2']=cel(equipSel||'',false,18);ws['F2']=cel('Técnico:',true,18);ws['I2']=cel('',false,18);
   ws['A3']=cel('',false,18);ws['F3']=cel('',false,18);ws['A4']=cel('',false,18);
-  ws['A5']={v:'',t:'s'};
+  merge('A1','B1');merge('C1','E1');merge('F1','H1');merge('I1','J1');
+  merge('A2','B2');merge('C2','E2');merge('F2','H2');merge('I2','J2');
+  merge('A3','J3');merge('A4','J4');
+
+  // ── Peças ──
   ws['A6']=cel('🛠️ DADOS DO CATÁLOGO',true,13,'FFD6E4BC','center',true,GRN);
   ws['E6']=cel('📦 ESTOQUE E CUSTO (Fabi)',true,13,'FFFFD966','center',true,AMB);
   ws['H6']=cel('⚙️ EXECUÇÃO (PCP/Compras)',true,13,'FFBDD7EE','center',true,BLU);
-  [['A6','D6'],['E6','G6'],['H6','J6'],['A1','B1'],['C1','E1'],['F1','H1'],['I1','J1'],['A2','B2'],['C2','E2'],['F2','H2'],['I2','J2'],['A3','J3'],['A4','J4']].forEach(([s,e])=>{
-    const toRC=ref=>{const col=ref.match(/[A-Z]+/)[0];const row=parseInt(ref.match(/\d+/)[0])-1;const c=col.split('').reduce((a,ch)=>a*26+(ch.charCodeAt(0)-64),0)-1;return{r:row,c}};
-    merges.push({s:toRC(s),e:toRC(e)});
-  });
+  merge('A6','D6');merge('E6','G6');merge('H6','J6');
   const cols7=['Pos. Catálogo','Código','Descrição','Qtd','Estoque','Custo (R$)','Tempo Fab.','Decisão','Prazo','Status/Pedido'];
   const bgs7=['FFD6E4BC','FFD6E4BC','FFD6E4BC','FFD6E4BC','FFFFD966','FFFFD966','FFFFD966','FFBDD7EE','FFBDD7EE','FFBDD7EE'];
   const clrs7=[GRN,GRN,GRN,GRN,AMB,AMB,AMB,BLU,BLU,BLU];
   'ABCDEFGHIJ'.split('').forEach((col,i)=>{ws[col+'7']=cel(cols7[i],true,13,bgs7[i],'center',true,clrs7[i]);});
-  ncItems.forEach((it,i)=>{
+  pecasItems.forEach((it,i)=>{
     const r=8+i;const bg=i%2===0?'FFFFFFFF':'FFF5F5F5';
-    ws['A'+r]=cel(it.pos,false,14,bg,'left',true);ws['B'+r]=cel(it.cod,false,14,bg,'center',true);
-    ws['C'+r]=cel(it.desc+(it.obs?` | ${it.obs}`:''),false,14,bg,'left',true);ws['D'+r]=cel(it.qtd,false,14,bg,'center',false);
-    'EFGHIJ'.split('').forEach(col=>{ws[col+r]=cel('',false,14,bg,'center',false);});
+    const pos=it.pos||('Ref. '+it.cod), desc=it.desc||((it.item||'')+(it.critico?' [CRÍTICO]':''));
+    ws['A'+r]=cel(pos,false,14,bg,'left',true);ws['B'+r]=cel(it.cod,false,14,bg,'center',true);
+    ws['C'+r]=cel(desc+(it.obs?` | ${it.obs}`:''),false,14,bg,'left',true);ws['D'+r]=cel(it.qtd,false,14,bg,'center',false);
+    ws['E'+r]=cel(it.estoque??'',false,14,bg,'center',false);ws['F'+r]=cel(it.custo??'',false,14,bg,'center',false);
+    ws['G'+r]=cel(it.tempoFab??'',false,14,bg,'center',false);ws['H'+r]=cel(it.decisao??'',false,14,bg,'center',false);
+    ws['I'+r]=cel(it.prazo??'',false,14,bg,'center',false);ws['J'+r]=cel(it.statusPedido??'',false,14,bg,'center',false);
   });
-  const lr=Math.max(8,7+ncItems.length);
+  const pecasLR=Math.max(8,7+pecasItems.length);
+
+  // ── Despesas (abaixo, sempre presente mesmo sem peça) ──
+  const despHdrRow=pecasLR+2;
+  ws['A'+despHdrRow]=cel('💰 DESPESAS E SERVIÇOS',true,13,'FFD6E4BC','center',true,GRN);
+  merge('A'+despHdrRow,'F'+despHdrRow);
+  const despColRow=despHdrRow+1;
+  const despCols=['Categoria','Descrição','Valor (R$)','Km','Lançado por','Data'];
+  'ABCDEF'.split('').forEach((col,i)=>{ws[col+despColRow]=cel(despCols[i],true,13,'FFD6E4BC','center',true,GRN);});
+  despesasItens.forEach((it,i)=>{
+    const r=despColRow+1+i, bg=i%2===0?'FFFFFFFF':'FFF5F5F5';
+    ws['A'+r]=cel(it.categoria,false,11,bg);ws['B'+r]=cel(it.descricao,false,11,bg);
+    ws['C'+r]=cel(it.valor||0,false,11,bg);ws['D'+r]=cel(it.km||0,false,11,bg);
+    ws['E'+r]=cel(it.quemLancou,false,11,bg);ws['F'+r]=cel(it.data,false,11,bg);
+  });
+  const totRow=despColRow+1+Math.max(despesasItens.length,0);
+  const totalRS=despesasItens.reduce((s,it)=>s+(it.valor||0),0);
+  const totalKM=despesasItens.reduce((s,it)=>s+(it.km||0),0);
+  ws['A'+totRow]=cel('Total:',true,12,'FFF5F5F5');
+  ws['C'+totRow]=cel(totalRS,true,12,'FFF5F5F5');
+  ws['D'+totRow]=cel(totalKM,true,12,'FFF5F5F5');
+
+  const lr=Math.max(pecasLR,totRow);
   ws['!ref']=`A1:J${lr}`;ws['!merges']=merges;
   ws['!cols']=[{wch:17},{wch:13},{wch:49},{wch:10},{wch:13},{wch:15},{wch:14},{wch:14},{wch:17},{wch:18}];
-  XLSX.utils.book_append_sheet(wb,ws,'lista de pecas');
+  XLSX.utils.book_append_sheet(wb,ws,'peças e despesas');
   return wb;
 }
 
@@ -2417,6 +2455,7 @@ async function salvarListaDrive(wb, osKey, nomeArq) {
             '&pastaId=' + encodeURIComponent(dp.id) +
             '&nomeArquivo=' + encodeURIComponent(nomeArq) +
             '&mimeType=application%2Fvnd.openxmlformats-officedocument.spreadsheetml.sheet' +
+            '&substituir=1' +
             '&base64=' + encodeURIComponent(wbout)
     });
     const d = await r.json();
@@ -2468,6 +2507,23 @@ async function buscarDespesasExistentes(osKey){
       }
     }
   }catch(e){ console.warn('Erro ao buscar despesas existentes:',e); }
+  return [];
+}
+
+async function buscarPecasExistentes(osKey){
+  try{
+    const r=await jiraFetch(`/rest/api/3/issue/${osKey}/comment?maxResults=50`);
+    const d=await r.json();
+    const comments=(d.comments||[]).slice().reverse();
+    for(const c of comments){
+      const bodyText=_extrairTextoADF_(c.body||{});
+      const match=bodyText.match(/\[LISTA_PECAS\]([\s\S]*?)\[\/LISTA_PECAS\]/);
+      if(match){
+        try{ return JSON.parse(decodeURIComponent(match[1])); }
+        catch(e){}
+      }
+    }
+  }catch(e){ console.warn('Erro ao buscar peças existentes:',e); }
   return [];
 }
 
@@ -2557,25 +2613,6 @@ function renderDespesas(){
   document.getElementById('desp-total-km').textContent=totalKM.toFixed(0);
 }
 
-function gerarWBDespesas(itens){
-  const wb=XLSX.utils.book_new();
-  const ws={};
-  function cel(v,bold,bg){return {v,t:typeof v==='number'?'n':'s',s:{font:{name:'Arial',sz:11,bold:!!bold,color:{rgb:'FF1F1F1F'}},fill:bg?{patternType:'solid',fgColor:{rgb:bg}}:{patternType:'none'},alignment:{horizontal:'left',vertical:'center',wrapText:true},border:{top:{style:'thin',color:{rgb:'FFD1D1D1'}},bottom:{style:'thin',color:{rgb:'FFD1D1D1'}},left:{style:'thin',color:{rgb:'FFD1D1D1'}},right:{style:'thin',color:{rgb:'FFD1D1D1'}}}}}; }
-  const cols=['Categoria','Descrição','Valor (R$)','Km','Lançado por','Data'];
-  cols.forEach((c,i)=>{ws['ABCDEF'[i]+'1']=cel(c,true,'FFD6E4BC');});
-  itens.forEach((it,i)=>{
-    const r=2+i, bg=i%2===0?'FFFFFFFF':'FFF5F5F5';
-    ws['A'+r]=cel(it.categoria,false,bg); ws['B'+r]=cel(it.descricao,false,bg);
-    ws['C'+r]=cel(it.valor||0,false,bg); ws['D'+r]=cel(it.km||0,false,bg);
-    ws['E'+r]=cel(it.quemLancou,false,bg); ws['F'+r]=cel(it.data,false,bg);
-  });
-  const lr=Math.max(2,1+itens.length);
-  ws['!ref']=`A1:F${lr}`;
-  ws['!cols']=[{wch:16},{wch:40},{wch:13},{wch:10},{wch:16},{wch:20}];
-  XLSX.utils.book_append_sheet(wb,ws,'despesas e servicos');
-  return wb;
-}
-
 async function salvarDespesasJira(){
   const novos=_despItens.filter(i=>i.novo);
   if(novos.length===0){toast('Nenhum item novo para salvar','er');return;}
@@ -2606,12 +2643,14 @@ async function salvarDespesasJira(){
     }
 
     load('Gerando planilha...');
-    const wb=gerarWBDespesas(_despItens);
-    const nomeArq=`despesas_servicos_${_despOsKey}_${new Date().toISOString().slice(0,10)}.xlsx`;
+    // Busca a lista de peças já registrada (se houver) pra completar o mesmo arquivo
+    const pecasExistentes = await buscarPecasExistentes(_despOsKey);
+    const wb=gerarWBCombinado(pecasExistentes, _despItens);
+    const nomeArq=`lista_pecas_despesas_${_despOsKey}.xlsx`;
     const wbout=XLSX.write(wb,{bookType:'xlsx',type:'base64'});
     await fetch(SCRIPT_URL,{
       method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'},
-      body:'action=uploadFile&pastaId='+encodeURIComponent(pastaId)+'&nomeArquivo='+encodeURIComponent(nomeArq)+'&mimeType=application%2Fvnd.openxmlformats-officedocument.spreadsheetml.sheet&base64='+encodeURIComponent(wbout)
+      body:'action=uploadFile&pastaId='+encodeURIComponent(pastaId)+'&nomeArquivo='+encodeURIComponent(nomeArq)+'&mimeType=application%2Fvnd.openxmlformats-officedocument.spreadsheetml.sheet&substituir=1&base64='+encodeURIComponent(wbout)
     });
 
     load('Atualizando Jira...');
