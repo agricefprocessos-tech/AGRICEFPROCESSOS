@@ -828,6 +828,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
     <div class="bw">
       <button class="btn btn-gr" onclick="salvarOrcamento()">☁️ Salvar Orçamento</button>
+      <button class="btn btn-am" style="margin-top:8px" onclick="gerarProposta()">📄 Gerar Proposta de Venda (PDF)</button>
+      <div class="ib" id="orc-proposta-link" style="display:none;margin-top:8px"></div>
     </div>
   </div>
 </div>
@@ -2848,6 +2850,49 @@ async function salvarOrcamento(){
     uload();
     toast('Erro: '+e.message,'er',6000);
     console.error(e);
+  }
+}
+
+async function gerarProposta(){
+  if(!_orcOsKey){toast('Carregue uma OS primeiro','er');return;}
+  if(!_orcPecas.length){toast('Nenhuma peça para gerar proposta','er');return;}
+  load('Gerando proposta...');
+  try{
+    const r=await jiraFetch(`/rest/api/3/issue/${_orcOsKey}`);
+    const d=await r.json();
+    const cliente=d.fields.customfield_10041||'';
+
+    const despesas=await buscarDespesasExistentes(_orcOsKey);
+    const totalServicos=despesas.filter(it=>it.categoria==='Serviço').reduce((s,it)=>s+(it.valor||0),0);
+
+    const rp=await fetch(`${SCRIPT_URL}?action=createFolder&nome=${encodeURIComponent(_orcOsKey)}&pastaRaizId=1zOu6023SHjNChj2P0HxAVlrBvZWUZ5v0`);
+    const dp=await rp.json();
+    if(dp.error) throw new Error(dp.error);
+
+    const payload={
+      pastaId: dp.id,
+      osKey: _orcOsKey,
+      cliente: cliente,
+      totalServicos: totalServicos,
+      itens: _orcPecas.map(p=>({
+        cod: p.cod||'', desc: (p.desc||p.item||'')+(p.critico&&!p.desc?' [CRÍTICO]':''),
+        qtd: p.qtd||1, custo: Number(p.custo)||0
+      }))
+    };
+    const resp=await fetch(SCRIPT_URL+'?action=propostaVenda',{
+      method:'POST', headers:{'Content-Type':'text/plain'}, body: JSON.stringify(payload)
+    });
+    const data=await resp.json();
+    if(data.error) throw new Error(data.error);
+
+    uload();
+    toast('✅ Proposta gerada!','ok',4000);
+    const linkEl=document.getElementById('orc-proposta-link');
+    linkEl.innerHTML=`<a href="${data.pdfUrl}" target="_blank" style="color:var(--gr);font-weight:600">📄 Abrir Proposta de Venda (PDF)</a>`;
+    linkEl.style.display='block';
+  }catch(e){
+    uload();
+    toast('Erro ao gerar proposta: '+e.message,'er',6000);
   }
 }
 
