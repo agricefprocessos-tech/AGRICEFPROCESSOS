@@ -2862,8 +2862,13 @@ async function gerarProposta(){
     const d=await r.json();
     const cliente=d.fields.customfield_10041||'';
 
-    const despesas=await buscarDespesasExistentes(_orcOsKey);
-    const servicos=despesas.filter(it=>it.categoria==='Serviço').map(it=>({descricao:it.descricao||'', valor:it.valor||0}));
+    const despesasExistentes=await buscarDespesasExistentes(_orcOsKey);
+    const icones={'Serviço':'🔧','Hotel':'🏨','Alimentação':'🍽️','Passagem':'✈️','Deslocamento':'🚗','Km rodado':'📍'};
+    const despesas=despesasExistentes.map(it=>({
+      descricao: (icones[it.categoria]||'📄')+' '+(it.categoria||'')+': '+(it.descricao||''),
+      valor: it.valor||0,
+      km: it.categoria==='Km rodado' ? (it.km||0) : 0
+    }));
 
     const rp=await fetch(`${SCRIPT_URL}?action=createFolder&nome=${encodeURIComponent(_orcOsKey)}&pastaRaizId=1zOu6023SHjNChj2P0HxAVlrBvZWUZ5v0`);
     const dp=await rp.json();
@@ -2873,7 +2878,7 @@ async function gerarProposta(){
       pastaId: dp.id,
       osKey: _orcOsKey,
       cliente: cliente,
-      servicos: servicos,
+      despesas: despesas,
       itens: _orcPecas.map(p=>({
         cod: p.cod||'', desc: (p.desc||p.item||'')+(p.critico&&!p.desc?' [CRÍTICO]':''),
         qtd: p.qtd||1, custo: Number(p.custo)||0, prazo: p.prazo||''
