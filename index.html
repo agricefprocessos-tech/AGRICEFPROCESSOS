@@ -2863,7 +2863,7 @@ async function gerarProposta(){
     const cliente=d.fields.customfield_10041||'';
 
     const despesas=await buscarDespesasExistentes(_orcOsKey);
-    const totalServicos=despesas.filter(it=>it.categoria==='Serviço').reduce((s,it)=>s+(it.valor||0),0);
+    const servicos=despesas.filter(it=>it.categoria==='Serviço').map(it=>({descricao:it.descricao||'', valor:it.valor||0}));
 
     const rp=await fetch(`${SCRIPT_URL}?action=createFolder&nome=${encodeURIComponent(_orcOsKey)}&pastaRaizId=1zOu6023SHjNChj2P0HxAVlrBvZWUZ5v0`);
     const dp=await rp.json();
@@ -2873,10 +2873,10 @@ async function gerarProposta(){
       pastaId: dp.id,
       osKey: _orcOsKey,
       cliente: cliente,
-      totalServicos: totalServicos,
+      servicos: servicos,
       itens: _orcPecas.map(p=>({
         cod: p.cod||'', desc: (p.desc||p.item||'')+(p.critico&&!p.desc?' [CRÍTICO]':''),
-        qtd: p.qtd||1, custo: Number(p.custo)||0
+        qtd: p.qtd||1, custo: Number(p.custo)||0, prazo: p.prazo||''
       }))
     };
     const resp=await fetch(SCRIPT_URL+'?action=propostaVenda',{
