@@ -858,6 +858,12 @@ async function jiraFetch(path, options={}) {
   const method = options.method || 'GET';
   console.log('jiraFetch:', method, path);
 
+  // O proxy do Apps Script só encaminha GET/PUT/POST. Qualquer outro método
+  // cairia no ramo do GET e devolveria 200 "de mentira" — falha silenciosa.
+  if(method !== 'GET' && method !== 'PUT' && method !== 'POST') {
+    throw new Error('jiraFetch: método '+method+' não é suportado pelo proxy');
+  }
+
   let r;
   if(method === 'PUT' || method === 'POST') {
     // Send mutations via POST to Apps Script with body in request body
@@ -891,6 +897,93 @@ async function jiraFetch(path, options={}) {
     return { ok: true, status: 200, json: async () => parsed, text: async () => text };
   }
   throw new Error('Resposta inesperada: ' + text.substring(0, 150));
+}
+
+// ===== STATUS DO CARD (fonte única da verdade) =====
+// Nomes exatamente como estão no Jira. Todo lugar que move card usa daqui —
+// nunca ID numérico, que quebra silencioso se o workflow for editado.
+const STATUS = {
+  TRIAGEM:      'NOVA OS / TRIAGEM',
+  REMOTO:       'EM SUPORTE REMOTO',
+  MIDIA:        'ANÁLISE REMOTA / MÍDIA',
+  BASE:         'AGUARDANDO CHEGADA – BASE',
+  PCP:          'AGUARDANDO DESLOCAMENTO',       // PCP prepara kit / agenda ida
+  LEVANTAMENTO: 'EM ANÁLISE INSPEÇÃO FÍSICA',    // levantamento de peças em campo
+  MANUTENCAO:   'EM MANUTENÇÃO',
+  ORCAMENTO:    'ORÇAMENTO E PRECIFICAÇÃO',
+  PROPOSTA:     'PROPOSTA PRONTA / ENVIADA',
+  HOMOLOGACAO:  'AGUARDANDO CS',                 // aguardando validação da Fabi
+  CONCLUIDO:    'Concluído'
+};
+
+// No workflow atual, EM ANÁLISE INSPEÇÃO FÍSICA só é alcançável a partir de
+// AGUARDANDO DESLOCAMENTO. Enquanto o Jira não liberar a transição direta,
+// passamos por esse intermediário automaticamente.
+const ROTA_VIA = { [STATUS.LEVANTAMENTO]: STATUS.PCP };
+
+// Move o card e DIZ se conseguiu. Nunca "chuta" um destino, nunca fecha a OS
+// por engano: se o destino não existir, não mexe em nada e devolve o motivo.
+async function moverCard(osKey, destino){
+  try{
+    const r=await jiraFetch(`/rest/api/3/issue/${osKey}/transitions`);
+    const d=await r.json();
+    const lista=d.transitions||[];
+    const direta=lista.find(x=>x.to?.name===destino);
+    if(direta){
+      await jiraFetch(`/rest/api/3/issue/${osKey}/transitions`,{method:'POST',body:JSON.stringify({transition:{id:direta.id}})});
+      return {ok:true};
+    }
+    const via=ROTA_VIA[destino];
+    if(via){
+      const tVia=lista.find(x=>x.to?.name===via);
+      if(tVia){
+        await jiraFetch(`/rest/api/3/issue/${osKey}/transitions`,{method:'POST',body:JSON.stringify({transition:{id:tVia.id}})});
+        const r2=await jiraFetch(`/rest/api/3/issue/${osKey}/transitions`);
+        const d2=await r2.json();
+        const tFim=(d2.transitions||[]).find(x=>x.to?.name===destino);
+        if(tFim){
+          await jiraFetch(`/rest/api/3/issue/${osKey}/transitions`,{method:'POST',body:JSON.stringify({transition:{id:tFim.id}})});
+          return {ok:true, via:via};
+        }
+        return {ok:false, motivo:`parou em "${via}": "${destino}" não ficou disponível`};
+      }
+    }
+    return {ok:false, motivo:`"${destino}" não está disponível para esta OS no Jira`};
+  }catch(e){
+    return {ok:false, motivo:e.message};
+  }
+}
+
+async function statusAtualDaOS(osKey){
+  try{
+    const r=await jiraFetch(`/rest/api/3/issue/${osKey}?fields=status`);
+    const d=await r.json();
+    return d.fields?.status?.name||'';
+  }catch(e){ return ''; }
+}
+
+// ===== GATES DE ENTRADA POR ABA =====
+// Bloqueia de verdade: se o card não está num status compatível, a aba não abre.
+const GATES = {
+  ate:  {proibidos:[STATUS.CONCLUIDO],
+         msg:'Esta OS já está concluída. Reabra o card no Jira antes de registrar um novo atendimento.'},
+  chk:  {proibidos:[STATUS.CONCLUIDO],
+         msg:'Esta OS já está concluída. Não é possível iniciar um checklist.'},
+  desp: {proibidos:[STATUS.CONCLUIDO],
+         msg:'Esta OS já está concluída. Não é possível lançar novas despesas.'},
+  orc:  {permitidos:[STATUS.LEVANTAMENTO,STATUS.ORCAMENTO,STATUS.PROPOSTA,STATUS.HOMOLOGACAO,STATUS.PCP,STATUS.MANUTENCAO],
+         msg:'O orçamento só pode ser montado depois do levantamento de peças. Faça o Checklist desta OS primeiro.'}
+};
+
+// Devolve {ok:true} ou {ok:false, msg}. Falha de rede não trava o time.
+async function checarGate(aba, osKey){
+  const g=GATES[aba];
+  if(!g||!osKey) return {ok:true};
+  const st=await statusAtualDaOS(osKey);
+  if(!st) return {ok:true};
+  if(g.proibidos && g.proibidos.includes(st)) return {ok:false, msg:g.msg, status:st};
+  if(g.permitidos && !g.permitidos.includes(st)) return {ok:false, msg:g.msg, status:st};
+  return {ok:true, status:st};
 }
 
 // ===== UTILS =====
@@ -935,8 +1028,13 @@ function setOSAtual(os){
   OS_ATUAL = {key:os.key, title:os.title||'', equip:os.equip||'', cli:os.cli||'', sta:os.sta||''};
 }
 
-function _autoCarregarOSAtual_(id){
+async function _autoCarregarOSAtual_(id){
   if(!OS_ATUAL) return;
+  // Só preenche/carrega sozinho se a OS passar no gate daquela aba. Se não
+  // passar, deixa a tela de busca limpa em vez de disparar um alerta que o
+  // usuário nem pediu — ele vê o motivo se tentar carregar na mão.
+  const gate=await checarGate(id, OS_ATUAL.key);
+  if(!gate.ok) return;
   if(id==='ate' && !osAtualMap['ate']){
     selOS('ate', OS_ATUAL);
   } else if(id==='chk'){
@@ -1557,20 +1655,12 @@ async function iniciarSuporteRemoto(){
   load('Iniciando suporte remoto...');
   try{
     await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:tec}})});
-    try{
-      const r2=await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`);
-      const td=await r2.json();
-      const t=(td.transitions||[]).find(t=>t.to?.name?.toUpperCase().includes('SUPORTE REMOTO'));
-      const transId=t?.id||'9';
-      await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`,{method:'POST',body:JSON.stringify({transition:{id:transId}})});
-    }catch(transErr){
-      console.warn('Transição EM SUPORTE REMOTO falhou:',transErr.message);
-      toast('Atenção: status não atualizado no Jira','al',4000);
-    }
+    const mv=await moverCard(os.key, STATUS.REMOTO);
     localStorage.setItem('agritrack_tec',tec);
     osAtualMap['ate'].tec=tec;
     uload();
-    toast('Suporte remoto iniciado!','ok',2500);
+    if(mv.ok) toast('Suporte remoto iniciado!','ok',2500);
+    else toast('Suporte remoto iniciado, mas o card NÃO mudou de status: '+mv.motivo,'al',7000);
     document.getElementById('ate-fase-rem-ini').style.display='none';
     document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Finalizar Suporte Remoto';
     document.getElementById('ate-tec-badge').textContent='📞 Suporte remoto em andamento por: '+tec;
@@ -1594,26 +1684,12 @@ async function iniciarManutencaoFisica(){
   load('Iniciando manutenção física...');
   try{
     await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:tec}})});
-    try{
-      const r2=await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`);
-      const td=await r2.json();
-      const t=(td.transitions||[]).find(t=>{
-        const n=t.to?.name?.toUpperCase()||'';
-        return n.includes('EM MANUTENÇÃO')||n.includes('EM MANUTENCAO')||n.includes('MANUTENÇÃO')&&n.startsWith('EM');
-      });
-      if(t){
-        await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`,{method:'POST',body:JSON.stringify({transition:{id:t.id}})});
-      } else {
-        toast('Atenção: transição EM MANUTENÇÃO não encontrada no Jira','al',5000);
-      }
-    }catch(transErr){
-      console.warn('Transição EM MANUTENÇÃO falhou:',transErr.message);
-      toast('Atenção: status não atualizado no Jira','al',4000);
-    }
+    const mv=await moverCard(os.key, STATUS.MANUTENCAO);
     localStorage.setItem('agritrack_tec',tec);
     osAtualMap['ate'].tec=tec;
     uload();
-    toast('Manutenção física iniciada!','ok',2500);
+    if(mv.ok) toast('Manutenção física iniciada!','ok',2500);
+    else toast('Manutenção iniciada, mas o card NÃO mudou de status: '+mv.motivo,'al',7000);
     document.getElementById('ate-fase-fis-ini').style.display='none';
     document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Finalizar Manutenção Física';
     document.getElementById('ate-tec-badge-fis').textContent='🔧 Manutenção física em andamento por: '+tec;
@@ -1643,23 +1719,12 @@ async function iniciarLevantamentoPecas(){
       console.warn('Campo técnico não atualizado:',tecErr.message);
       toast('Atenção: técnico não registrado no campo do Jira','al',4000);
     }
-    try{
-      const r2=await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`);
-      const td=await r2.json();
-      const t=(td.transitions||[]).find(t=>t.to?.name?.toUpperCase().includes('LEVANTAMENTO'));
-      if(t){
-        await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`,{method:'POST',body:JSON.stringify({transition:{id:t.id}})});
-      } else {
-        toast('Atenção: crie o status EM LEVANTAMENTO no Jira para rastrear esta etapa','al',5000);
-      }
-    }catch(transErr){
-      console.warn('Transição EM LEVANTAMENTO falhou:',transErr.message);
-      toast('Atenção: status não atualizado no Jira','al',4000);
-    }
+    const mv=await moverCard(os.key, STATUS.LEVANTAMENTO);
     localStorage.setItem('agritrack_tec',tec);
     osAtualMap['ate'].tec=tec;
     uload();
-    toast('Levantamento iniciado! Abrindo checklist...','ok',2500);
+    if(mv.ok) toast('Levantamento iniciado! Abrindo checklist...','ok',2500);
+    else toast('Levantamento iniciado, mas o card NÃO mudou de status: '+mv.motivo,'al',7000);
     abrirChecklistDeAtendimento(os.key,tec,os.equip);
   }catch(e){uload();toast('Erro: '+e.message,'er',6000);}
 }
@@ -1939,34 +2004,26 @@ async function finalizarAtendimentoRemoto(){
       catch(e){ console.warn('Falhou salvar kit no Jira:',e); }
     }
 
-    // Transição de status
-    const r2=await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`);
-    const td=await r2.json();
-    const trans=td.transitions||[];
-    let transId=null;
-    if(resolvido){
-      const tHom=trans.find(t=>{const n=t.to?.name?.toUpperCase()||'';return n.includes('HOMOLOGAÇÃO')||n.includes('HOMOLOGACAO');});
-      const tConc=trans.find(t=>{const n=t.to?.name?.toUpperCase()||'';return n.includes('CONCLUÍDO')||n.includes('CONCLUIDO');});
-      transId=tHom?.id||tConc?.id||'41';
-    } else if(precisaFisico){
-      const tPCP=trans.find(t=>{const n=t.to?.name?.toUpperCase()||'';return n.includes('AGUARDANDO PCP')||n.includes('AGENDAMENTO');});
-      transId=tPCP?.id||null;
-      if(!transId) toast('Atenção: crie o status AGUARDANDO PCP/AGENDAMENTO no Jira','al',6000);
-    } else if(res==='nao_base'){
-      transId=trans.find(t=>t.to?.name?.toUpperCase().includes('CHEGADA'))?.id||'2';
-    } else if(res==='nao_midia'){
-      transId=trans.find(t=>{const n=t.to?.name?.toUpperCase()||'';return n.includes('ANÁLISE')||n.includes('ANALISE')||n.includes('MÍDIA');})?.id||'4';
-    }
-    if(transId) await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`,{method:'POST',body:JSON.stringify({transition:{id:transId}})});
+    // Transição de status — destino explícito, sem chute e sem fechar OS por engano
+    let destino=null;
+    if(resolvido) destino=STATUS.HOMOLOGACAO;
+    else if(precisaFisico) destino=STATUS.PCP;
+    else if(res==='nao_base') destino=STATUS.BASE;
+    else if(res==='nao_midia') destino=STATUS.MIDIA;
+    const mv=destino?await moverCard(os.key,destino):{ok:true};
 
     try{ await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:null}})}); }
     catch(e){ console.warn('Não foi possível limpar campo técnico:',e.message); }
 
     uload(); window._ateSaving=false;
     let icon,titulo,texto;
-    if(resolvido){icon='✅';titulo='OS Concluída!';texto=`OS <b>${os.key}</b> enviada para homologação.<br>PDF salvo no Drive.`;}
+    if(resolvido){icon='✅';titulo='Enviado para validação!';texto=`OS <b>${os.key}</b> aguardando validação da Fabi.<br>PDF salvo no Drive.`;}
     else if(precisaFisico){icon='📦';titulo='Encaminhado para PCP!';texto=`OS <b>${os.key}</b> aguardando PCP preparar kit.<br>${_pecasRemotas.filter(p=>p.nome.trim()).length} peça(s) listada(s).`;}
     else{icon='📤';titulo='Escalonado!';texto=`OS <b>${os.key}</b> encaminhada.<br>PDF salvo no Drive.`;}
+    if(!mv.ok){
+      icon='⚠️'; titulo='Salvo, mas o card não andou';
+      texto=`Os dados da OS <b>${os.key}</b> foram salvos, mas o status <b>não</b> mudou para "${destino}".<br><br><b>Motivo:</b> ${esc(mv.motivo)}<br><br>Mova o card manualmente no Jira.`;
+    }
     document.getElementById('ate-s3-icon').textContent=icon;
     document.getElementById('ate-s3-tit').textContent=titulo;
     document.getElementById('ate-s3-txt').innerHTML=texto;
@@ -2034,23 +2091,19 @@ async function finalizarManutencaoFisica(){
       catch(e){ console.warn('Falhou comentário conciliação:',e); }
     }
 
-    // Transição → AGUARDANDO HOMOLOGAÇÃO (preferencial) ou CONCLUÍDO
-    const r2=await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`);
-    const td=await r2.json();
-    const trans=td.transitions||[];
-    const tHom=trans.find(t=>{const n=t.to?.name?.toUpperCase()||'';return n.includes('HOMOLOGAÇÃO')||n.includes('HOMOLOGACAO');});
-    const tConc=trans.find(t=>{const n=t.to?.name?.toUpperCase()||'';return n.includes('CONCLUÍDO')||n.includes('CONCLUIDO');});
-    const transId=tHom?.id||tConc?.id||'41';
-    await jiraFetch(`/rest/api/3/issue/${os.key}/transitions`,{method:'POST',body:JSON.stringify({transition:{id:transId}})});
+    // Transição → validação da Fabi. Nunca fecha a OS direto.
+    const mv=await moverCard(os.key, STATUS.HOMOLOGACAO);
 
     try{ await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:null}})}); }
     catch(e){ console.warn('Não foi possível limpar campo técnico:',e.message); }
 
     uload(); window._ateSaving=false;
     const aplicadas=_kitPecas.filter(p=>p.status==='aplicada').length;
-    document.getElementById('ate-s3-icon').textContent='🔧';
-    document.getElementById('ate-s3-tit').textContent=tHom?'Aguardando Homologação!':'Manutenção Concluída!';
-    document.getElementById('ate-s3-txt').innerHTML=`OS <b>${os.key}</b> ${tHom?'enviada para validação pela Fabi':'marcada como Concluída'}.<br>${aplicadas} peça(s) aplicada(s).<br>Relatório salvo no Drive.`;
+    document.getElementById('ate-s3-icon').textContent=mv.ok?'🔧':'⚠️';
+    document.getElementById('ate-s3-tit').textContent=mv.ok?'Aguardando validação!':'Salvo, mas o card não andou';
+    document.getElementById('ate-s3-txt').innerHTML=mv.ok
+      ? `OS <b>${os.key}</b> enviada para validação pela Fabi.<br>${aplicadas} peça(s) aplicada(s).<br>Relatório salvo no Drive.`
+      : `Relatório da OS <b>${os.key}</b> salvo, mas o status <b>não</b> mudou para "${STATUS.HOMOLOGACAO}".<br><br><b>Motivo:</b> ${esc(mv.motivo)}<br><br>Mova o card manualmente no Jira.`;
     document.getElementById('ate-s2').style.display='none';
     document.getElementById('ate-s3').style.display='block';
   }catch(e){uload();window._ateSaving=false;toast('Erro: '+e.message,'er',6000);}
@@ -2087,6 +2140,8 @@ async function selEquip(nome){
       toast('OS '+osKey+' não encontrada no Jira. Confira o número antes de continuar.','er',6000);
       return;
     }
+    const gate=await checarGate('chk', osKey);
+    if(!gate.ok){ uload(); toast(`🚫 ${gate.msg} (status atual: ${gate.status})`,'er',8000); return; }
     uload();
   } else {
     setOSAtual({key:osKey, title:'', equip:nome, cli:'', sta:''});
@@ -2424,16 +2479,10 @@ async function salvarTudoDrive() {
       await r2.json();
     }
 
-    // Atualizar status do Jira para ORÇAMENTO E PRECIFICAÇÃO (transição 6)
+    // Levantamento concluído → card vai para Orçamento e Precificação
     const osKey2 = document.getElementById('chk-os-key')?.value?.trim();
-    if(osKey2) {
-      try {
-        await jiraFetch(`/rest/api/3/issue/${osKey2}/transitions`, {
-          method: 'POST',
-          body: JSON.stringify({transition:{id:'6'}})
-        });
-      } catch(je) { console.warn('Transição Jira:', je.message); }
-    }
+    let mvChk = {ok:true};
+    if(osKey2) mvChk = await moverCard(osKey2, STATUS.ORCAMENTO);
 
     // Se veio do modo "Levantamento de Peças" do Atendimento: registra o
     // técnico no comentário do Jira e libera a OS para novos atendimentos
@@ -2471,7 +2520,7 @@ async function salvarTudoDrive() {
     successDiv.innerHTML = `
       <div style="font-size:60px;margin-bottom:16px">✅</div>
       <div style="font-size:20px;font-weight:700;color:var(--gr);margin-bottom:8px">Salvo com sucesso!</div>
-      <div style="font-size:13px;color:var(--t2);margin-bottom:24px">Lista de peças e PDF de inspeção salvos na pasta <b>${osKey}</b> no Drive.<br>Card do Jira movido para Orçamento.${levTec?`<br>Levantamento de <b>${levTec}</b> registrado.`:''}</div>
+      <div style="font-size:13px;color:var(--t2);margin-bottom:24px">Lista de peças e PDF de inspeção salvos na pasta <b>${osKey}</b> no Drive.<br>${mvChk.ok?'Card do Jira movido para Orçamento.':`<span style="color:var(--rd);font-weight:700">⚠️ O card NÃO mudou de status: ${esc(mvChk.motivo)} — mova manualmente no Jira.</span>`}${levTec?`<br>Levantamento de <b>${levTec}</b> registrado.`:''}</div>
       <div style="display:flex;flex-direction:column;gap:8px;width:100%;max-width:280px">
         <button onclick="document.getElementById('chk-success-overlay').remove();swTab('orc',document.querySelectorAll('.tab')[4]);" style="background:var(--am);color:#fff;border:none;padding:14px 28px;border-radius:var(--rs);font-size:15px;font-weight:700;cursor:pointer">📦 Ir para Orçamento</button>
         <button onclick="document.getElementById('chk-success-overlay').remove();swTab('desp',document.querySelectorAll('.tab')[3]);" style="background:var(--bl);color:#fff;border:none;padding:14px 28px;border-radius:var(--rs);font-size:15px;font-weight:700;cursor:pointer">💰 Ir para Despesas</button>
@@ -2610,6 +2659,8 @@ async function carregarDespesas(){
     toast('OS '+osKey+' não encontrada no Jira. Confira o número.','er',6000);
     return;
   }
+  const gateD=await checarGate('desp', osData.key);
+  if(!gateD.ok){ uload(); toast(`🚫 ${gateD.msg} (status atual: ${gateD.status})`,'er',8000); return; }
   load('Carregando itens já lançados...');
   _despOsKey=osData.key;
   _despItens=await buscarDespesasExistentes(osData.key);
@@ -2802,7 +2853,7 @@ async function salvarDespesasJira(){
 }
 
 // ===== ABA ORÇAMENTO (Fabi/PCP) =====
-var _orcOsKey=null, _orcPecas=[];
+var _orcOsKey=null, _orcPecas=[], _orcPropostaGerada=false;
 
 async function carregarOrcamento(){
   const osKey=document.getElementById('orc-os-key').value.trim();
@@ -2819,8 +2870,12 @@ async function carregarOrcamento(){
     toast('OS '+osKey+' não encontrada no Jira. Confira o número.','er',6000);
     return;
   }
+  const gateO=await checarGate('orc', osData.key);
+  if(!gateO.ok){ uload(); toast(`🚫 ${gateO.msg} (status atual: ${gateO.status})`,'er',8000); return; }
   load('Carregando peças...');
   _orcOsKey=osData.key;
+  _orcPropostaGerada=(gateO.status===STATUS.PROPOSTA); // OS que já tem proposta pode finalizar
+  document.getElementById('orc-proposta-link').style.display='none';
   _orcPecas=await buscarPecasExistentes(osData.key);
 
   load('Consultando base de preços...');
@@ -3024,6 +3079,12 @@ async function salvarOrcamento(){
 async function gerarProposta(){
   if(!_orcOsKey){toast('Carregue uma OS primeiro','er');return;}
   if(!_orcPecas.length){toast('Nenhuma peça para gerar proposta','er');return;}
+  // Gate de saída: proposta vai pro cliente — não sai com peça sem preço.
+  const semCusto=_orcPecas.filter(p=>!(Number(p.custo)>0));
+  if(semCusto.length){
+    toast(`🚫 ${semCusto.length} peça(s) sem preço: ${semCusto.slice(0,3).map(p=>p.cod||'?').join(', ')}${semCusto.length>3?'...':''}. Preencha o Custo antes de gerar a proposta.`,'er',9000);
+    return;
+  }
   load('Gerando proposta...');
   try{
     const r=await jiraFetch(`/rest/api/3/issue/${_orcOsKey}`);
@@ -3059,8 +3120,13 @@ async function gerarProposta(){
     const data=await resp.json();
     if(data.error) throw new Error(data.error);
 
+    load('Atualizando status do card...');
+    const mv=await moverCard(_orcOsKey, STATUS.PROPOSTA);
+    _orcPropostaGerada=true;
+
     uload();
-    toast('✅ Proposta gerada!','ok',4000);
+    if(mv.ok) toast('✅ Proposta gerada! Card movido para "'+STATUS.PROPOSTA+'".','ok',4500);
+    else toast('Proposta gerada, mas o card NÃO mudou de status: '+mv.motivo,'al',7000);
     const linkEl=document.getElementById('orc-proposta-link');
     linkEl.innerHTML=`<a href="${data.pdfUrl}" target="_blank" style="color:var(--gr);font-weight:600">📄 Abrir Proposta de Venda (PDF)</a>`;
     linkEl.style.display='block';
@@ -3074,17 +3140,31 @@ function voltarOrc(){
   document.getElementById('orc-main').style.display='none';
   document.getElementById('orc-os-box').style.display='block';
   document.getElementById('orc-os-key').value='';
-  _orcOsKey=null; _orcPecas=[];
+  _orcOsKey=null; _orcPecas=[]; _orcPropostaGerada=false;
 }
 
-// Fecha o ciclo desta OS: some com a "OS atual" (não puxa mais sozinha nas
-// outras abas) e volta pra tela de busca — sinal claro de "terminei por aqui".
-function finalizarOrcamento(){
+// Fecha o ciclo da OS de verdade: envia o card para validação (não fecha
+// direto) e limpa a "OS atual" pra ela não ser puxada de novo nas outras abas.
+async function finalizarOrcamento(){
   const key=_orcOsKey;
+  if(!key){toast('Carregue uma OS primeiro','er');return;}
+  if(!_orcPropostaGerada){
+    toast('🚫 Gere a Proposta de Venda antes de finalizar esta OS.','er',7000);
+    return;
+  }
+  if(!confirm(`Finalizar a OS ${key}?\n\nO card vai para "${STATUS.HOMOLOGACAO}" aguardando validação.`)) return;
+  load('Finalizando OS...');
+  const mv=await moverCard(key, STATUS.HOMOLOGACAO);
+  uload();
+  if(!mv.ok){
+    toast('Não foi possível mover o card: '+mv.motivo+'. Mova manualmente no Jira.','er',9000);
+    return;
+  }
   if(OS_ATUAL && OS_ATUAL.key===key) OS_ATUAL=null;
+  _orcPropostaGerada=false;
   voltarOrc();
   document.getElementById('orc-proposta-link').style.display='none';
-  toast('✅ '+(key||'OS')+' finalizada nesta sessão. Boa sorte na próxima!','ok',4000);
+  toast('✅ '+key+' finalizada e enviada para validação.','ok',5000);
 }
 
 // AgriTrack v2.1
