@@ -347,6 +347,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     </div>
     <div class="bw">
       <button class="btn btn-gr" onclick="irParaAtendimento()">⚡ Ir para Atendimento →</button>
+      <button class="btn btn-bl" style="margin-top:8px" onclick="irLevantamentoDaTriagem()">📋 Já sei que vai ter Levantamento de Peças →</button>
       <button class="btn btn-gy" style="margin-top:8px" onclick="novaTri()">Nova Triagem</button>
     </div>
   </div>
@@ -1255,6 +1256,29 @@ function irParaAtendimento(){
     document.getElementById('ate-s2').style.display='block';
     mostrarFaseAtendimento(osFresh);
   }
+  novaTri();
+}
+
+// Atalho: quando já se sabe, ainda na Triagem, que o próximo passo vai ser
+// Levantamento de Peças — pula a seleção de modo e vai direto pra seleção de técnico.
+function irLevantamentoDaTriagem(){
+  const os = osAtualMap['tri'];
+  if(!os) return;
+  swTab('ate', document.querySelector('.tab:nth-child(2)'));
+  const osFresh = {...os, tec:'', sta: os.sta||'TRIAGEM'};
+  osAtualMap['ate'] = osFresh;
+  document.getElementById('ate-os-box').innerHTML=`
+    <div class="os-box-key">${osFresh.key}</div>
+    <div class="os-box-tit">${osFresh.title}</div>
+    <div class="os-box-inf">${osFresh.cli} · ${osFresh.equip} · <b>${osFresh.sta}</b></div>`;
+  document.getElementById('ate-s1').style.display='none';
+  document.getElementById('ate-s2').style.display='block';
+  ['ate-modo','ate-fase-rem-ini','ate-fase-rem-fin',
+   'ate-fase-fis-ini','ate-fase-fis-fin',
+   'ate-fase-lev-ini','ate-fase-lev-fin','ate-bloq'].forEach(id=>{
+    document.getElementById(id).style.display='none';
+  });
+  selecionarModo('levantamento');
   novaTri();
 }
 
