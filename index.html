@@ -2902,7 +2902,8 @@ async function preencherComBaseDados_(pecas){
   const mapaTipo={'COMERCIAL':'Comprar','PRODUÇÃO':'Fabricar'};
   pecas.forEach(p=>{
     const bd=resultados[String(p.cod||'').trim()];
-    if(!bd) return;
+    if(!bd){ p._naoEncontrado=true; return; }
+    p._naoEncontrado=false;
     p._ncm=bd.ncm||''; p._unidade=bd.unidade||'UN';
     p._observacao=bd.observacao||''; p._dataCusto=bd.dataCusto||'';
     p._sugerido=p._sugerido||[];
@@ -2939,6 +2940,7 @@ function renderOrcamento(){
       ${p._observacao?`<div style="padding:2px 12px;font-size:11px;color:var(--t2);font-style:italic">💬 ${esc(p._observacao)}</div>`:''}
       ${(p._sugerido||[]).length?'<div style="padding:0 12px;font-size:10px;color:var(--am);font-weight:600">🔍 Campos com sugestão da base de preços — confira antes de salvar</div>':''}
       ${custoVelho?`<div style="padding:0 12px;font-size:10px;color:var(--rd);font-weight:600">⚠️ Custo de referência com ${Math.round(meses)} meses — considere revisar</div>`:''}
+      ${p._naoEncontrado?'<div style="padding:0 12px;font-size:10px;color:var(--rd);font-weight:700">⚠️ Peça não cadastrada na base de preços — preencha todos os dados manualmente</div>':''}
       <div class="cb" style="padding-top:0">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
           <div class="f" style="margin-bottom:0">
