@@ -830,6 +830,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       <button class="btn btn-gr" onclick="salvarOrcamento()">☁️ Salvar Orçamento</button>
       <button class="btn btn-am" style="margin-top:8px" onclick="gerarProposta()">📄 Gerar Proposta de Venda (PDF)</button>
       <div class="ib" id="orc-proposta-link" style="display:none;margin-top:8px"></div>
+      <button class="btn btn-gy" style="margin-top:8px" onclick="finalizarOrcamento()">🏁 Finalizar esta OS</button>
     </div>
   </div>
 </div>
@@ -895,6 +896,7 @@ function swTab(id, el){
   document.getElementById('pg-'+id).classList.add('on');
   const labels = {tri:'Questionário de triagem',ate:'Resultado do atendimento',chk:'Checklist de verificação',desp:'Serviços e despesas',orc:'Estoque, custo e execução'};
   document.getElementById('hdr-s').textContent = labels[id]||'';
+  _autoCarregarOSAtual_(id);
 }
 
 function selRadio(name, val, elId){
@@ -908,6 +910,44 @@ var osAtualMap = {};
 var _bt = {};
 
 var _osCache = {};
+
+// ===== OS ATUAL (compartilhada entre abas p/ fluidez) =====
+// A ideia: qualquer aba que carregue/crie/selecione uma OS com sucesso vira a
+// "atual". Ao trocar de aba, se ela ainda não tem OS carregada, puxa a atual
+// automaticamente — sem precisar redigitar o número em cada tela.
+var OS_ATUAL = null;
+function setOSAtual(os){
+  if(!os || !os.key) return;
+  OS_ATUAL = {key:os.key, title:os.title||'', equip:os.equip||'', cli:os.cli||'', sta:os.sta||''};
+}
+
+function _autoCarregarOSAtual_(id){
+  if(!OS_ATUAL) return;
+  if(id==='ate' && !osAtualMap['ate']){
+    selOS('ate', OS_ATUAL);
+  } else if(id==='chk'){
+    const eqBox=document.getElementById('chk-eq');
+    const inp=document.getElementById('chk-os-key');
+    if(eqBox && eqBox.style.display!=='none' && inp && !inp.value){
+      inp.value=OS_ATUAL.key;
+      if(OS_ATUAL.equip==='Hauler'||OS_ATUAL.equip==='Sider') selEquip(OS_ATUAL.equip);
+    }
+  } else if(id==='desp'){
+    const box=document.getElementById('desp-os-box');
+    const inp=document.getElementById('desp-os-key');
+    if(box && box.style.display!=='none' && inp && !inp.value){
+      inp.value=OS_ATUAL.key;
+      carregarDespesas();
+    }
+  } else if(id==='orc'){
+    const box=document.getElementById('orc-os-box');
+    const inp=document.getElementById('orc-os-key');
+    if(box && box.style.display!=='none' && inp && !inp.value){
+      inp.value=OS_ATUAL.key;
+      carregarOrcamento();
+    }
+  }
+}
 
 function buscarOS(ctx, v){
   clearTimeout(_bt[ctx]);
@@ -944,6 +984,7 @@ function selOSCache(ctx){
 
 function selOS(ctx, os){
   osAtualMap[ctx] = os;
+  setOSAtual(os);
   document.getElementById(ctx+'-os-res').innerHTML='';
   document.getElementById(ctx+'-os-inp').value='';
   document.getElementById(ctx+'-os-box').innerHTML=`
@@ -2024,13 +2065,17 @@ async function selEquip(nome){
   if(!(_levantamentoCtx && _levantamentoCtx.osKey===osKey)){
     load('Verificando OS...');
     try{
-      await jiraFetch(`/rest/api/3/issue/${osKey}`);
+      const rEq=await jiraFetch(`/rest/api/3/issue/${osKey}`);
+      const dEq=await rEq.json();
+      setOSAtual({key:osKey, title:dEq.fields.summary, equip:nome, cli:dEq.fields.customfield_10041||'', sta:dEq.fields.status?.name||''});
     }catch(e){
       uload();
       toast('OS '+osKey+' não encontrada no Jira. Confira o número antes de continuar.','er',6000);
       return;
     }
     uload();
+  } else {
+    setOSAtual({key:osKey, title:'', equip:nome, cli:'', sta:''});
   }
   SECTIONS = nome==='Sider' ? SECTIONS_SIDER : SECTIONS_HAULER;
   equipSel=nome;
@@ -2407,12 +2452,17 @@ async function salvarTudoDrive() {
 
     // Mostrar tela de sucesso temporária
     const successDiv = document.createElement('div');
+    successDiv.id = 'chk-success-overlay';
     successDiv.style.cssText = 'position:fixed;inset:0;background:var(--gl);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:999;padding:20px;text-align:center';
     successDiv.innerHTML = `
       <div style="font-size:60px;margin-bottom:16px">✅</div>
       <div style="font-size:20px;font-weight:700;color:var(--gr);margin-bottom:8px">Salvo com sucesso!</div>
       <div style="font-size:13px;color:var(--t2);margin-bottom:24px">Lista de peças e PDF de inspeção salvos na pasta <b>${osKey}</b> no Drive.<br>Card do Jira movido para Orçamento.${levTec?`<br>Levantamento de <b>${levTec}</b> registrado.`:''}</div>
-      <button onclick="this.parentElement.remove();voltarEq();" style="background:var(--gr);color:#fff;border:none;padding:14px 28px;border-radius:var(--rs);font-size:15px;font-weight:700;cursor:pointer">Novo Checklist</button>
+      <div style="display:flex;flex-direction:column;gap:8px;width:100%;max-width:280px">
+        <button onclick="document.getElementById('chk-success-overlay').remove();swTab('orc',document.querySelectorAll('.tab')[4]);" style="background:var(--am);color:#fff;border:none;padding:14px 28px;border-radius:var(--rs);font-size:15px;font-weight:700;cursor:pointer">📦 Ir para Orçamento</button>
+        <button onclick="document.getElementById('chk-success-overlay').remove();swTab('desp',document.querySelectorAll('.tab')[3]);" style="background:var(--bl);color:#fff;border:none;padding:14px 28px;border-radius:var(--rs);font-size:15px;font-weight:700;cursor:pointer">💰 Ir para Despesas</button>
+        <button onclick="document.getElementById('chk-success-overlay').remove();voltarEq();" style="background:var(--gr);color:#fff;border:none;padding:14px 28px;border-radius:var(--rs);font-size:15px;font-weight:700;cursor:pointer">Novo Checklist</button>
+      </div>
     `;
     document.body.appendChild(successDiv);
     
@@ -2540,6 +2590,7 @@ async function carregarDespesas(){
     const r=await jiraFetch(`/rest/api/3/issue/${osKey}`);
     const d=await r.json();
     osData={key:d.key,title:d.fields.summary};
+    setOSAtual({key:d.key, title:d.fields.summary, equip:d.fields.customfield_10050?.value||'', cli:d.fields.customfield_10041||'', sta:d.fields.status?.name||''});
   }catch(e){
     uload();
     toast('OS '+osKey+' não encontrada no Jira. Confira o número.','er',6000);
@@ -2748,6 +2799,7 @@ async function carregarOrcamento(){
     const r=await jiraFetch(`/rest/api/3/issue/${osKey}`);
     const d=await r.json();
     osData={key:d.key,title:d.fields.summary};
+    setOSAtual({key:d.key, title:d.fields.summary, equip:d.fields.customfield_10050?.value||'', cli:d.fields.customfield_10041||'', sta:d.fields.status?.name||''});
   }catch(e){
     uload();
     toast('OS '+osKey+' não encontrada no Jira. Confira o número.','er',6000);
@@ -2906,6 +2958,16 @@ function voltarOrc(){
   document.getElementById('orc-os-box').style.display='block';
   document.getElementById('orc-os-key').value='';
   _orcOsKey=null; _orcPecas=[];
+}
+
+// Fecha o ciclo desta OS: some com a "OS atual" (não puxa mais sozinha nas
+// outras abas) e volta pra tela de busca — sinal claro de "terminei por aqui".
+function finalizarOrcamento(){
+  const key=_orcOsKey;
+  if(OS_ATUAL && OS_ATUAL.key===key) OS_ATUAL=null;
+  voltarOrc();
+  document.getElementById('orc-proposta-link').style.display='none';
+  toast('✅ '+(key||'OS')+' finalizada nesta sessão. Boa sorte na próxima!','ok',4000);
 }
 
 // AgriTrack v2.1
