@@ -810,7 +810,11 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
       </div>
       <button class="btn btn-gr" style="margin-top:8px" onclick="carregarOrcamento()">Carregar →</button>
     </div>
-    <div class="ib">Fabi preenche Estoque e Custo, PCP preenche Tempo de Fabricação, Decisão, Prazo e Status/Pedido. Ao salvar, a lista de peças no Drive é atualizada automaticamente — sem precisar editar o Excel.</div>
+    <div class="ib">Fabi preenche Estoque e Custo, PCP preenche Tempo de Fabricação, Decisão, Prazo e Status/Pedido. Ao salvar, a lista de peças no Drive é atualizada automaticamente — sem precisar editar o Excel.<br><br>💡 Custo, estoque e prazo já vêm sugeridos da base de preços quando o código da peça é reconhecido.</div>
+    <div style="padding:0 12px 12px;text-align:center">
+      <button onclick="sincronizarBaseDados()" style="background:none;border:none;color:var(--t2);font-size:11px;font-weight:600;cursor:pointer;text-decoration:underline">🔄 Sincronizar base de preços (após editar a planilha)</button>
+      <div id="orc-sync-info" style="font-size:10px;color:var(--t2);margin-top:2px"></div>
+    </div>
   </div>
 
   <div id="orc-main" style="display:none">
@@ -2808,11 +2812,56 @@ async function carregarOrcamento(){
   load('Carregando peças...');
   _orcOsKey=osData.key;
   _orcPecas=await buscarPecasExistentes(osData.key);
+
+  load('Consultando base de preços...');
+  await preencherComBaseDados_(_orcPecas);
+
   uload();
   document.getElementById('orc-os-box').style.display='none';
   document.getElementById('orc-main').style.display='block';
   document.getElementById('orc-sub').textContent=osData.key+' — '+osData.title;
   renderOrcamento();
+}
+
+async function sincronizarBaseDados(){
+  const info=document.getElementById('orc-sync-info');
+  info.textContent='Sincronizando...';
+  try{
+    const r=await fetch(`${SCRIPT_URL}?action=sincronizarBaseDados`);
+    const d=await r.json();
+    if(d.error) throw new Error(d.error);
+    const hora=new Date(d.sincronizadoEm).toLocaleString('pt-BR');
+    info.textContent='✅ Sincronizado às '+hora;
+    toast('Base de preços sincronizada!','ok',3000);
+  }catch(e){
+    info.textContent='';
+    toast('Erro ao sincronizar: '+e.message,'er',5000);
+  }
+}
+
+// Cruza as peças carregadas com a base de precos (Drive/Agricef dados) pelo
+// código, preenchendo estoque/custo/tempoFab só quando ainda estão vazios --
+// nunca sobrescreve o que a Fabi/PCP já preencheu manualmente antes.
+async function preencherComBaseDados_(pecas){
+  const cods=[...new Set(pecas.map(p=>String(p.cod||'').trim()).filter(Boolean))];
+  if(!cods.length) return;
+  let resultados={};
+  try{
+    const r=await fetch(`${SCRIPT_URL}?action=buscarDadosPecas&cods=${encodeURIComponent(cods.join(','))}`);
+    const d=await r.json();
+    if(d.error){ console.warn('Base de dados de peças:', d.error); return; }
+    resultados=d.resultados||{};
+  }catch(e){ console.warn('Erro ao consultar base de dados de peças:', e.message); return; }
+
+  pecas.forEach(p=>{
+    const bd=resultados[String(p.cod||'').trim()];
+    if(!bd) return;
+    p._ncm=bd.ncm||''; p._unidade=bd.unidade||'UN';
+    p._sugerido=p._sugerido||[];
+    if(p.custo===undefined||p.custo===null||p.custo===''){ p.custo=bd.custo; p._sugerido.push('custo'); }
+    if(!p.estoque && (bd.estoqueMin||bd.estoqueMax)){ p.estoque=`Mín ${bd.estoqueMin} / Máx ${bd.estoqueMax}`; p._sugerido.push('estoque'); }
+    if(!p.tempoFab && bd.prazoDias){ p.tempoFab=`${bd.prazoDias} dias`; p._sugerido.push('tempoFab'); }
+  });
 }
 
 function renderOrcamento(){
@@ -2824,6 +2873,9 @@ function renderOrcamento(){
     return;
   }
   vazio.style.display='none';
+  const sug=(p,campo)=> (p._sugerido||[]).includes(campo)
+    ? 'border-color:var(--am);background:#fffbeb' : '';
+  const sugLbl=(p,campo,txt)=> (p._sugerido||[]).includes(campo) ? txt+' 🔍' : txt;
   list.innerHTML=_orcPecas.map((p,i)=>`
     <div class="kit-item">
       <div class="kit-item-hdr">
@@ -2831,21 +2883,22 @@ function renderOrcamento(){
         <span class="kit-item-nm">${esc((p.desc||p.item||'—')+(p.critico&&!p.desc?' [CRÍTICO]':''))}</span>
         <span class="kit-item-qty">Qtd: ${esc(p.qtd||1)}</span>
       </div>
+      ${(p._sugerido||[]).length?'<div style="padding:0 12px;font-size:10px;color:var(--am);font-weight:600">🔍 Campos com sugestão da base de preços — confira antes de salvar</div>':''}
       <div class="cb" style="padding-top:0">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
           <div class="f" style="margin-bottom:0">
-            <label>📦 Estoque</label>
-            <input type="text" data-i="${i}" data-campo="estoque" value="${esc(p.estoque||'')}" placeholder="Ex: 2 un" oninput="atualizarCampoPeca(this)">
+            <label>${sugLbl(p,'estoque','📦 Estoque')}</label>
+            <input type="text" data-i="${i}" data-campo="estoque" value="${esc(p.estoque||'')}" placeholder="Ex: 2 un" style="${sug(p,'estoque')}" oninput="atualizarCampoPeca(this)">
           </div>
           <div class="f" style="margin-bottom:0">
-            <label>💵 Custo (R$)</label>
-            <input type="number" min="0" step="0.01" data-i="${i}" data-campo="custo" value="${esc(p.custo??'')}" placeholder="0,00" oninput="atualizarCampoPeca(this)">
+            <label>${sugLbl(p,'custo','💵 Custo (R$)')}</label>
+            <input type="number" min="0" step="0.01" data-i="${i}" data-campo="custo" value="${esc(p.custo??'')}" placeholder="0,00" style="${sug(p,'custo')}" oninput="atualizarCampoPeca(this)">
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
           <div class="f" style="margin-bottom:0">
-            <label>⏱️ Tempo Fab.</label>
-            <input type="text" data-i="${i}" data-campo="tempoFab" value="${esc(p.tempoFab||'')}" placeholder="Ex: 5 dias" oninput="atualizarCampoPeca(this)">
+            <label>${sugLbl(p,'tempoFab','⏱️ Tempo Fab.')}</label>
+            <input type="text" data-i="${i}" data-campo="tempoFab" value="${esc(p.tempoFab||'')}" placeholder="Ex: 5 dias" style="${sug(p,'tempoFab')}" oninput="atualizarCampoPeca(this)">
           </div>
           <div class="f" style="margin-bottom:0">
             <label>📝 Decisão</label>
@@ -2873,6 +2926,12 @@ function atualizarCampoPeca(el){
   let v=el.value;
   if(campo==='custo') v=(v==='')?'':Number(v);
   _orcPecas[i][campo]=v;
+  // Uma vez editado, o campo deixa de ser só "sugestão" e o destaque visual some
+  const p=_orcPecas[i];
+  if(p._sugerido && p._sugerido.includes(campo)){
+    p._sugerido=p._sugerido.filter(c=>c!==campo);
+    el.style.cssText='';
+  }
 }
 
 async function salvarOrcamento(){
@@ -2933,7 +2992,8 @@ async function gerarProposta(){
       despesas: despesas,
       itens: _orcPecas.map(p=>({
         cod: p.cod||'', desc: (p.desc||p.item||'')+(p.critico&&!p.desc?' [CRÍTICO]':''),
-        qtd: p.qtd||1, custo: Number(p.custo)||0, prazo: p.prazo||''
+        qtd: p.qtd||1, custo: Number(p.custo)||0, prazo: p.prazo||'',
+        ncm: p._ncm||'', unidade: p._unidade||'UN'
       }))
     };
     const resp=await fetch(SCRIPT_URL+'?action=propostaVenda',{
