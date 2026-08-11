@@ -830,6 +830,16 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="orc-list"></div>
     <div class="ib" id="orc-vazio" style="display:none">Nenhuma peça foi registrada no Checklist desta OS ainda.</div>
 
+    <div class="card" style="margin:10px 12px">
+      <div class="cb">
+        <div class="f" style="margin-bottom:0">
+          <label>➕ Adicionar peça avulsa (não veio do Checklist)</label>
+          <input type="text" id="orc-busca-cat" placeholder="Digite código ou descrição..." autocomplete="off" oninput="buscarCatalogoDebounced(this.value)">
+        </div>
+        <div id="orc-busca-res"></div>
+      </div>
+    </div>
+
     <div class="bw">
       <button class="btn btn-gr" onclick="salvarOrcamento()">☁️ Salvar Orçamento</button>
       <button class="btn btn-am" style="margin-top:8px" onclick="gerarProposta()">📄 Gerar Proposta de Venda (PDF)</button>
@@ -2823,6 +2833,42 @@ async function carregarOrcamento(){
   renderOrcamento();
 }
 
+var _btCatalogo=null, _catalogoCache=[];
+function buscarCatalogoDebounced(q){
+  clearTimeout(_btCatalogo);
+  const resEl=document.getElementById('orc-busca-res');
+  if(!q||q.trim().length<2){resEl.innerHTML='';return;}
+  _btCatalogo=setTimeout(async()=>{
+    resEl.innerHTML='<div style="font-size:12px;color:var(--t2);padding:6px 0">Buscando...</div>';
+    try{
+      const r=await fetch(`${SCRIPT_URL}?action=buscarCatalogo&q=${encodeURIComponent(q.trim())}`);
+      const d=await r.json();
+      if(d.error){ resEl.innerHTML='<div style="font-size:12px;color:var(--rd);padding:6px 0">'+esc(d.error)+'</div>'; return; }
+      _catalogoCache=d.resultados||[];
+      if(!_catalogoCache.length){ resEl.innerHTML='<div style="font-size:12px;color:var(--t2);padding:6px 0">Nenhum resultado</div>'; return; }
+      resEl.innerHTML=_catalogoCache.map((item,i)=>`
+        <div class="os-res" onclick="adicionarPecaAvulsa(${i})">
+          <div class="os-key">${esc(item.cod)}</div>
+          <div class="os-tit">${esc(item.desc)}</div>
+          <div class="os-inf">${esc(item.unidade)}${item.ncm?' · NCM '+esc(item.ncm):''}</div>
+        </div>
+      `).join('');
+    }catch(e){ resEl.innerHTML='<div style="font-size:12px;color:var(--rd);padding:6px 0">Erro: '+esc(e.message)+'</div>'; }
+  },500);
+}
+
+async function adicionarPecaAvulsa(i){
+  const item=_catalogoCache[i];
+  if(!item) return;
+  const nova={secao:'Avulsa (adicionada no Orçamento)', cod:item.cod, item:item.desc, critico:false, qtd:1, obs:''};
+  _orcPecas.push(nova);
+  await preencherComBaseDados_([nova]);
+  document.getElementById('orc-busca-cat').value='';
+  document.getElementById('orc-busca-res').innerHTML='';
+  renderOrcamento();
+  toast('Peça adicionada — não esqueça de Salvar Orçamento','ok',3000);
+}
+
 async function sincronizarBaseDados(){
   const info=document.getElementById('orc-sync-info');
   info.textContent='Sincronizando...';
@@ -2853,14 +2899,17 @@ async function preencherComBaseDados_(pecas){
     resultados=d.resultados||{};
   }catch(e){ console.warn('Erro ao consultar base de dados de peças:', e.message); return; }
 
+  const mapaTipo={'COMERCIAL':'Comprar','PRODUÇÃO':'Fabricar'};
   pecas.forEach(p=>{
     const bd=resultados[String(p.cod||'').trim()];
     if(!bd) return;
     p._ncm=bd.ncm||''; p._unidade=bd.unidade||'UN';
+    p._observacao=bd.observacao||''; p._dataCusto=bd.dataCusto||'';
     p._sugerido=p._sugerido||[];
-    if(p.custo===undefined||p.custo===null||p.custo===''){ p.custo=bd.custo; p._sugerido.push('custo'); }
-    if(!p.estoque && (bd.estoqueMin||bd.estoqueMax)){ p.estoque=`Mín ${bd.estoqueMin} / Máx ${bd.estoqueMax}`; p._sugerido.push('estoque'); }
+    // Estoque min/max não é o disponível de verdade -- não pré-preenche, só informa a Fabi.
+    if(p.custo===undefined||p.custo===null||p.custo===''){ p.custo=bd.valorVenda; p._sugerido.push('custo'); }
     if(!p.tempoFab && bd.prazoDias){ p.tempoFab=`${bd.prazoDias} dias`; p._sugerido.push('tempoFab'); }
+    if(!p.decisao && mapaTipo[bd.tipo]){ p.decisao=mapaTipo[bd.tipo]; p._sugerido.push('decisao'); }
   });
 }
 
@@ -2876,19 +2925,25 @@ function renderOrcamento(){
   const sug=(p,campo)=> (p._sugerido||[]).includes(campo)
     ? 'border-color:var(--am);background:#fffbeb' : '';
   const sugLbl=(p,campo,txt)=> (p._sugerido||[]).includes(campo) ? txt+' 🔍' : txt;
-  list.innerHTML=_orcPecas.map((p,i)=>`
+  const mesesDesde=iso=>{ if(!iso) return null; const dt=new Date(iso); if(isNaN(dt)) return null; return (Date.now()-dt.getTime())/(1000*60*60*24*30); };
+  list.innerHTML=_orcPecas.map((p,i)=>{
+    const meses=mesesDesde(p._dataCusto);
+    const custoVelho=meses!==null && meses>6;
+    return `
     <div class="kit-item">
       <div class="kit-item-hdr">
         <span class="kit-item-cod">${esc(p.cod||'—')}</span>
         <span class="kit-item-nm">${esc((p.desc||p.item||'—')+(p.critico&&!p.desc?' [CRÍTICO]':''))}</span>
         <span class="kit-item-qty">Qtd: ${esc(p.qtd||1)}</span>
       </div>
+      ${p._observacao?`<div style="padding:2px 12px;font-size:11px;color:var(--t2);font-style:italic">💬 ${esc(p._observacao)}</div>`:''}
       ${(p._sugerido||[]).length?'<div style="padding:0 12px;font-size:10px;color:var(--am);font-weight:600">🔍 Campos com sugestão da base de preços — confira antes de salvar</div>':''}
+      ${custoVelho?`<div style="padding:0 12px;font-size:10px;color:var(--rd);font-weight:600">⚠️ Custo de referência com ${Math.round(meses)} meses — considere revisar</div>`:''}
       <div class="cb" style="padding-top:0">
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
           <div class="f" style="margin-bottom:0">
-            <label>${sugLbl(p,'estoque','📦 Estoque')}</label>
-            <input type="text" data-i="${i}" data-campo="estoque" value="${esc(p.estoque||'')}" placeholder="Ex: 2 un" style="${sug(p,'estoque')}" oninput="atualizarCampoPeca(this)">
+            <label>📦 Estoque</label>
+            <input type="text" data-i="${i}" data-campo="estoque" value="${esc(p.estoque||'')}" placeholder="Ex: 2 un" oninput="atualizarCampoPeca(this)">
           </div>
           <div class="f" style="margin-bottom:0">
             <label>${sugLbl(p,'custo','💵 Custo (R$)')}</label>
@@ -2901,8 +2956,8 @@ function renderOrcamento(){
             <input type="text" data-i="${i}" data-campo="tempoFab" value="${esc(p.tempoFab||'')}" placeholder="Ex: 5 dias" style="${sug(p,'tempoFab')}" oninput="atualizarCampoPeca(this)">
           </div>
           <div class="f" style="margin-bottom:0">
-            <label>📝 Decisão</label>
-            <input type="text" data-i="${i}" data-campo="decisao" value="${esc(p.decisao||'')}" placeholder="Ex: Comprar / Fabricar" oninput="atualizarCampoPeca(this)">
+            <label>${sugLbl(p,'decisao','📝 Decisão')}</label>
+            <input type="text" data-i="${i}" data-campo="decisao" value="${esc(p.decisao||'')}" placeholder="Ex: Comprar / Fabricar" style="${sug(p,'decisao')}" oninput="atualizarCampoPeca(this)">
           </div>
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
@@ -2917,7 +2972,7 @@ function renderOrcamento(){
         </div>
       </div>
     </div>
-  `).join('');
+  `;}).join('');
 }
 
 function atualizarCampoPeca(el){
