@@ -2481,7 +2481,6 @@ function voltarDesp(){
 function toggleCampoDespesa(){
   const cat=document.getElementById('desp-categoria').value;
   const ehKm=cat==='Km rodado';
-  document.getElementById('desp-f-valor').style.display=ehKm?'none':'block';
   document.getElementById('desp-f-km').style.display=ehKm?'block':'none';
   const ehComprovavel=['Hotel','Alimentação','Passagem'].includes(cat);
   document.getElementById('desp-f-comprovante').style.display=ehComprovavel?'block':'none';
@@ -2495,20 +2494,19 @@ function adicionarItemDespesa(){
   if(!descricao){toast('Descreva o item','er');return;}
   if(!quem){toast('Selecione quem lançou','er');return;}
   const ehKm=categoria==='Km rodado';
-  let valor=0, km=0;
+  const valor=parseFloat(document.getElementById('desp-valor').value);
+  if(!Number.isFinite(valor)||valor<=0){toast('Informe o valor','er');return;}
+  let km=0;
   if(ehKm){
     km=parseFloat(document.getElementById('desp-km').value);
     if(!Number.isFinite(km)||km<=0){toast('Informe a quilometragem','er');return;}
-  }else{
-    valor=parseFloat(document.getElementById('desp-valor').value);
-    if(!Number.isFinite(valor)||valor<=0){toast('Informe o valor','er');return;}
   }
   const fileInput=document.getElementById('desp-comprovante-input');
   const comprovanteFile=(fileInput.files&&fileInput.files[0])?fileInput.files[0]:null;
 
   _despItens.push({
     id:'d'+Date.now()+Math.random().toString(36).slice(2,7),
-    categoria, descricao, valor:ehKm?0:valor, km:ehKm?km:0,
+    categoria, descricao, valor, km:ehKm?km:0,
     quemLancou:quem, data:new Date().toLocaleString('pt-BR'),
     novo:true, _comprovanteFile:comprovanteFile,
     comprovanteNome:comprovanteFile?comprovanteFile.name:''
@@ -2540,7 +2538,7 @@ function renderDespesas(){
   const icones={'Serviço':'🔧','Hotel':'🏨','Alimentação':'🍽️','Passagem':'✈️','Deslocamento':'🚗','Km rodado':'📍'};
   _despItens.forEach(it=>{
     totalRS+=(it.valor||0); totalKM+=(it.km||0);
-    const valorTxt=it.categoria==='Km rodado' ? `${esc(it.km)} km` : `R$ ${Number(it.valor||0).toFixed(2)}`;
+    const valorTxt=it.categoria==='Km rodado' ? `R$ ${Number(it.valor||0).toFixed(2)} (${esc(it.km)} km)` : `R$ ${Number(it.valor||0).toFixed(2)}`;
     const div=document.createElement('div');
     div.className='kit-item';
     div.innerHTML=`
@@ -2621,7 +2619,7 @@ async function salvarDespesasJira(){
     const itensParaSalvar=_despItens.map(({_comprovanteFile,...resto})=>resto);
     const tag='\n[DESPESAS_SERVICOS]'+encodeURIComponent(JSON.stringify(itensParaSalvar))+'[/DESPESAS_SERVICOS]';
     const resumoNovos=novos.map((it,i)=>{
-      const v=it.categoria==='Km rodado' ? `${it.km} km` : `R$ ${Number(it.valor).toFixed(2)}`;
+      const v=it.categoria==='Km rodado' ? `R$ ${Number(it.valor).toFixed(2)} (${it.km} km)` : `R$ ${Number(it.valor).toFixed(2)}`;
       return `${i+1}. [${it.categoria}] ${it.descricao} — ${v} (${it.quemLancou})`;
     }).join('\n');
     const comentario={body:toADF(`💰 Serviços/Despesas lançados\n\n${resumoNovos}\n\nData: ${new Date().toLocaleString('pt-BR')}${tag}`)};
