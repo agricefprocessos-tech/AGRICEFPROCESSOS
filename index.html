@@ -1566,7 +1566,9 @@ function mostrarFaseAtendimento(os){
     document.getElementById(id).style.display='none';
   });
 
-  if(sta.includes('SUPORTE REMOTO')){
+  const eh = alvo => sta === String(alvo||'').toUpperCase().trim();
+
+  if(eh(STATUS.REMOTO)){
     if(!tecOS || tecOS===tecLocal){
       document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Finalizar Suporte Remoto';
       document.getElementById('ate-tec-badge').textContent='📞 Suporte remoto em andamento por: '+(tecOS||tecLocal);
@@ -1575,7 +1577,7 @@ function mostrarFaseAtendimento(os){
       document.getElementById('ate-bloq-txt').innerHTML='Esta OS está em suporte remoto com <b>'+esc(tecOS)+'</b>.<br>Apenas esse técnico pode finalizá-la.';
       document.getElementById('ate-bloq').style.display='block';
     }
-  } else if(sta.includes('MANUTENÇÃO')||sta.includes('MANUTENCAO')||sta.includes('MANUTEN')){
+  } else if(eh(STATUS.MANUTENCAO)){
     if(!tecOS || tecOS===tecLocal){
       document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Finalizar Manutenção Física';
       document.getElementById('ate-tec-badge-fis').textContent='🔧 Manutenção física em andamento por: '+(tecOS||tecLocal);
@@ -1585,13 +1587,13 @@ function mostrarFaseAtendimento(os){
       document.getElementById('ate-bloq-txt').innerHTML='Esta OS está em manutenção com <b>'+esc(tecOS)+'</b>.<br>Apenas esse técnico pode finalizá-la.';
       document.getElementById('ate-bloq').style.display='block';
     }
-  } else if(sta.includes('AGUARDANDO PCP')||sta.includes('AGENDAMENTO')){
+  } else if(eh(STATUS.PCP)){
     // Diagnóstico remoto feito, PCP preparou kit — próximo passo é físico
     document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Iniciar Manutenção Física';
     if(tecLocal) document.getElementById('ate-tec-sel-fis').value=tecLocal;
     verificarKitExistente(os.key);
     document.getElementById('ate-fase-fis-ini').style.display='block';
-  } else if(sta.includes('LEVANTAMENTO')){
+  } else if(eh(STATUS.LEVANTAMENTO)){
     if(!tecOS || tecOS===tecLocal){
       document.getElementById('ate-s2-lbl').textContent='Passo 2 de 3 — Levantamento em Andamento';
       document.getElementById('ate-tec-badge-lev').textContent='📋 Levantamento de peças em andamento por: '+(tecOS||tecLocal);
