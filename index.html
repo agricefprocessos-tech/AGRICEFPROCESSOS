@@ -916,6 +916,16 @@ const STATUS = {
   CONCLUIDO:    'Concluído'
 };
 
+// Valores exatos do campo "Tipo de Atendimento" (customfield_10117) no Jira.
+// Preenchê-lo alimenta os relatórios e o e-mail do webhook, que já exibe esse
+// campo mas vinha sempre vazio.
+const TIPO_ATEND = {
+  REMOTO:   'Suporte Remoto',
+  IN_LOCO:  'Visita In Loco',
+  BASE:     'Manutencao na Base',
+  MIDIA:    'Analise por Midia'
+};
+
 // No workflow atual, EM ANÁLISE INSPEÇÃO FÍSICA só é alcançável a partir de
 // AGUARDANDO DESLOCAMENTO. Enquanto o Jira não liberar a transição direta,
 // passamos por esse intermediário automaticamente.
@@ -1656,7 +1666,7 @@ async function iniciarSuporteRemoto(){
   }
   load('Iniciando suporte remoto...');
   try{
-    await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:tec}})});
+    await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:tec, customfield_10117:{value:TIPO_ATEND.REMOTO}}})});
     const mv=await moverCard(os.key, STATUS.REMOTO);
     localStorage.setItem('agritrack_tec',tec);
     osAtualMap['ate'].tec=tec;
@@ -1685,7 +1695,7 @@ async function iniciarManutencaoFisica(){
   }
   load('Iniciando manutenção física...');
   try{
-    await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:tec}})});
+    await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:tec, customfield_10117:{value:TIPO_ATEND.IN_LOCO}}})});
     const mv=await moverCard(os.key, STATUS.MANUTENCAO);
     localStorage.setItem('agritrack_tec',tec);
     osAtualMap['ate'].tec=tec;
@@ -1716,7 +1726,7 @@ async function iniciarLevantamentoPecas(){
   load('Iniciando levantamento de peças...');
   try{
     try{
-      await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:tec}})});
+      await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields:{customfield_10048:tec, customfield_10117:{value:TIPO_ATEND.IN_LOCO}}})});
     }catch(tecErr){
       console.warn('Campo técnico não atualizado:',tecErr.message);
       toast('Atenção: técnico não registrado no campo do Jira','al',4000);
@@ -1992,6 +2002,10 @@ async function finalizarAtendimentoRemoto(){
     const fields={customfield_10048:tec};
     if(resolvido) fields.customfield_10044=toADF(document.getElementById('ate-sol').value.trim());
     else fields.customfield_10046=toADF(precisaFisico?document.getElementById('ate-mot-fisico').value.trim():document.getElementById('ate-mot').value.trim());
+    // Registra para onde o caso foi encaminhado — vira relatório depois
+    if(res==='nao_base')       fields.customfield_10117={value:TIPO_ATEND.BASE};
+    else if(res==='nao_midia') fields.customfield_10117={value:TIPO_ATEND.MIDIA};
+    else if(precisaFisico)     fields.customfield_10117={value:TIPO_ATEND.IN_LOCO};
     await jiraFetch(`/rest/api/3/issue/${os.key}`,{method:'PUT',body:JSON.stringify({fields})});
 
     // Salvar kit de peças em comentário Jira para o PCP e para o técnico físico ler depois
